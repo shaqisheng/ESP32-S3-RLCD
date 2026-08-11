@@ -1,0 +1,24 @@
+tmp/
+components/
+managed_components/
+build/
+build-*/
+dist/
+.vscode/
+.devcontainer/
+sdkconfig.old
+sdkconfig
+dependencies.lock
+.env
+releases/
+main/assets/lang_config.h
+main/mmap_generate_emoji.h
+.DS_Store
+.cache
+*.pyc
+*.bin
+mmap_generate_*.h
+.clangd
+
+# 敏感配置文件（密钥等），只提交 .example 模板
+secret_config.h

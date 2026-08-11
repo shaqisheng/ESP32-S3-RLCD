@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Generate crisp A1 LVGL weather icons for the 400x300 monochrome RLCD."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
+
+
+MASTER = 256
+LINE = 15
+ICON_NAMES = (
+    "sunny",
+    "partly_cloudy",
+    "overcast",
+    "rain",
+    "thunder",
+    "snow",
+    "fog",
+    "unknown",
+)
+
+
+def xy(values):
+    return tuple(round(value * MASTER / 64) for value in values)
+
+
+def cloud_fill() -> Image.Image:
+    mask = Image.new("L", (MASTER, MASTER), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse(xy((8, 25, 32, 48)), fill=255)
+    draw.ellipse(xy((19, 13, 50, 48)), fill=255)
+    draw.ellipse(xy((36, 22, 60, 48)), fill=255)
+    draw.rectangle(xy((18, 29, 50, 48)), fill=255)
+    return mask
+
+
+def outline(mask: Image.Image, width: int = LINE) -> Image.Image:
+    kernel = max(3, width | 1)
+    inner = mask.filter(ImageFilter.MinFilter(kernel))
+    return ImageChops.subtract(mask, inner)
+
+
+def draw_sun(target: Image.Image, cx=32, cy=30, radius=11, rays=True):
+    draw = ImageDraw.Draw(target)
+    draw.ellipse(xy((cx - radius, cy - radius, cx + radius, cy + radius)),
+                 outline=255, width=LINE)
+    if not rays:
+        return
+    for points in (
+        (cx, cy - 25, cx, cy - 17), (cx, cy + 17, cx, cy + 25),
+        (cx - 25, cy, cx - 17, cy), (cx + 17, cy, cx + 25, cy),
+        (cx - 18, cy - 18, cx - 12, cy - 12),
+        (cx + 12, cy + 12, cx + 18, cy + 18),
+        (cx + 18, cy - 18, cx + 12, cy - 12),
+        (cx - 12, cy + 12, cx - 18, cy + 18),
+    ):
+        draw.line(xy(points), fill=255, width=LINE)
+
+
+def add_cloud(target: Image.Image):
+    target.paste(ImageChops.lighter(target, outline(cloud_fill())))
+
+
+def draw_snowflake(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int):
+    draw.line(xy((cx, cy - radius, cx, cy + radius)), fill=255, width=LINE - 3)
+    draw.line(xy((cx - radius, cy - radius // 2, cx + radius, cy + radius // 2)),
+              fill=255, width=LINE - 3)
+    draw.line(xy((cx + radius, cy - radius // 2, cx - radius, cy + radius // 2)),
+              fill=255, width=LINE - 3)
+
+
+def render_master(name: str) -> Image.Image:
+    image = Image.new("L", (MASTER, MASTER), 0)
+    draw = ImageDraw.Draw(image)
+    if name == "sunny":
+        draw_sun(image, 32, 32, 11)
+    elif name == "partly_cloudy":
+        draw_sun(image, 22, 22, 8)
+        cloud = cloud_fill()
+        image.paste(0, mask=cloud)
+        image = ImageChops.lighter(image, outline(cloud))
+    elif name == "overcast":
+        add_cloud(image)
+        draw.line(xy((22, 54, 50, 54)), fill=255, width=LINE - 3)
+    elif name in ("rain", "thunder", "snow"):
+        add_cloud(image)
+        if name == "rain":
+            for x in (21, 34, 47):
+                draw.line(xy((x + 2, 48, x - 2, 57)), fill=255, width=LINE)
+        elif name == "thunder":
+            draw.line(xy((36, 47, 29, 55, 37, 55, 32, 62, 46, 51, 38, 51, 42, 47)),
+                      fill=255, width=LINE, joint="curve")
+        else:
+            draw_snowflake(draw, 22, 55, 7)
+            draw_snowflake(draw, 44, 55, 7)
+    elif name == "fog":
+        cloud = cloud_fill().resize((MASTER, round(MASTER * 0.78)))
+        compact = Image.new("L", (MASTER, MASTER), 0)
+        compact.paste(cloud, (0, 0))
+        image = outline(compact)
+        draw = ImageDraw.Draw(image)
+        for x1, x2, y in ((10, 47, 45), (18, 56, 53), (10, 45, 61)):
+            draw.line(xy((x1, y, x2, y)), fill=255, width=LINE - 3)
+    else:
+        add_cloud(image)
+        draw.line(xy((27, 27, 29, 23, 34, 21, 39, 23, 41, 27, 39, 31, 34, 34, 32, 38)),
+                  fill=255, width=LINE, joint="curve")
+        draw.ellipse(xy((30, 43, 34, 47)), fill=255)
+    return image
+
+
+def raster(name: str, size: int) -> Image.Image:
+    reduced = render_master(name).resize((size, size), Image.Resampling.LANCZOS)
+    return reduced.point(lambda value: 255 if value >= 72 else 0, mode="1")
+
+
+def c_bytes(image: Image.Image) -> list[int]:
+    return list(image.tobytes())
+
+
+def emit_array(lines: list[str], symbol: str, size: int, data: list[int]):
+    lines.append(f"static const LV_ATTRIBUTE_MEM_ALIGN uint8_t {symbol}_map[] = {{")
+    for offset in range(0, len(data), 16):
+        chunk = ", ".join(f"0x{value:02x}" for value in data[offset:offset + 16])
+        lines.append(f"    {chunk},")
+    lines.extend((
+        "};",
+        "",
+        f"const lv_image_dsc_t {symbol} = {{",
+        "    .header.magic = LV_IMAGE_HEADER_MAGIC,",
+        "    .header.cf = LV_COLOR_FORMAT_A1,",
+        f"    .header.w = {size},",
+        f"    .header.h = {size},",
+        f"    .header.stride = {(size + 7) // 8},",
+        f"    .data_size = sizeof({symbol}_map),",
+        f"    .data = {symbol}_map,",
+        "};",
+        "",
+    ))
+
+
+def write_c(output: Path):
+    lines = [
+        "/* Generated by scripts/generate_rlcd_weather_icons.py.",
+        " * Visual language adapted for monochrome RLCD from Meteocons Mono.",
+        " * Reference: https://github.com/basmilius/meteocons (MIT License).",
+        " */",
+        '#include "lvgl.h"',
+        "",
+        "#ifndef LV_ATTRIBUTE_MEM_ALIGN",
+        "#define LV_ATTRIBUTE_MEM_ALIGN",
+        "#endif",
+        "",
+    ]
+    for name in ICON_NAMES:
+        emit_array(lines, f"ui_img_weather_{name}_large", 56, c_bytes(raster(name, 56)))
+        emit_array(lines, f"ui_img_weather_{name}_small", 28, c_bytes(raster(name, 28)))
+    output.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_preview(output: Path):
+    preview = Image.new("RGB", (8 * 92 + 32, 184), "white")
+    draw = ImageDraw.Draw(preview)
+    draw.rectangle((0, 0, preview.width, 92), fill="black")
+    for index, name in enumerate(ICON_NAMES):
+        large = raster(name, 56).convert("L")
+        small = raster(name, 28).convert("L")
+        x = 22 + index * 92
+        preview.paste(Image.merge("RGB", (large, large, large)), (x, 18))
+        inverted = Image.eval(small, lambda value: 255 - value)
+        preview.paste(Image.merge("RGB", (inverted, inverted, inverted)), (x + 14, 120))
+    preview.save(output)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("output", type=Path)
+    parser.add_argument("--preview", type=Path)
+    args = parser.parse_args()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    write_c(args.output)
+    if args.preview:
+        write_preview(args.preview)
+
+
+if __name__ == "__main__":
+    main()
