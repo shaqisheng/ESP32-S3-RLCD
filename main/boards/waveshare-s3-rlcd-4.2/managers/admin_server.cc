@@ -36,6 +36,27 @@ void ScheduleTodoDisplayRefresh() {
     });
 }
 
+// 后台远程切页：mode 与 MCP 工具 self.disp.switch 保持一致
+// （toggle / overview|weather / calendar / forecast / quota）。
+// 必须经 Application::Schedule 投递到主任务，HTTP 线程不能直接操作 LVGL。
+void ScheduleDisplaySwitch(const std::string& mode) {
+    Application::GetInstance().Schedule([mode]() {
+        auto* display = static_cast<CustomLcdDisplay*>(Board::GetInstance().GetDisplay());
+        if (!display) return;
+        if (mode == "toggle") {
+            display->CycleDisplayMode();
+        } else if (mode == "overview" || mode == "weather") {
+            display->SwitchToWeatherPage();
+        } else if (mode == "calendar") {
+            display->SwitchToCalendarPage();
+        } else if (mode == "forecast") {
+            display->SwitchToForecastPage();
+        } else if (mode == "quota") {
+            display->SwitchToQuotaPage();
+        }
+    });
+}
+
 const char kAdminHtml[] = R"HTML(<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RLCD CONTROL</title><style>
@@ -62,7 +83,7 @@ input,select{width:100%;font:inherit;border:1px solid var(--line);border-radius:
 <main><section id="auth" class="auth"><h1 id="authTitle">管理员登录</h1><p class="hint" id="authHint">局域网设备管理。会话闲置 30 分钟后失效。</p><div class="field"><label>用户名<input id="user" value="admin" disabled></label></div><div class="field"><label>密码<input id="password" type="password" autocomplete="current-password"></label></div><button class="primary" id="authBtn">登录</button></section>
 <section id="dashboard" class="hidden"><div class="toolbar"><div><b>设备页面编排</b><div class="hint">额度每屏固定 4 项，停留时每 10 秒翻页</div></div><div><button id="refreshBtn">立即刷新</button> <button id="logoutBtn">退出</button></div></div>
 <div class="grid"><aside class="panel"><h2>PAGE ROUTING</h2><div id="pages"></div><button class="primary" id="savePages">保存页面顺序</button><hr><div id="runStatus" class="status">读取状态…</div><div class="field"><label>AI 自动刷新（分钟）<input id="quotaRefreshMinutes" type="number" min="1" max="60" step="1"></label></div><button onclick="saveQuotaRefreshInterval()">保存刷新间隔</button><p class="hint">默认 5 分钟，可设置 1–60 分钟<br>后台端口：8080<br>凭据：只写，不会回显</p></aside>
-<article class="panel"><section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用内存</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低内存</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div></div><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div></section>
+<article class="panel"><section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用内存</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低内存</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div></div><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面</label><div class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"><button onclick="switchPage('overview')">综合</button><button onclick="switchPage('calendar')">日历</button><button onclick="switchPage('forecast')">天气</button><button onclick="switchPage('quota')">AI</button><button onclick="switchPage('toggle')">下一页</button></div><p class="hint">立即切换设备屏幕到对应页面，与 USER 按钮单击等效</p></section>
 <div class="toolbar"><h2 style="border:0;margin:0">ACCOUNT MANAGEMENT <span id="count" class="badge">0 / 32</span></h2><div><button id="reloadBtn">放弃修改</button> <button id="addBtn">＋ 添加账号</button></div></div><div id="quotas"></div><button class="primary" id="saveQuotas">保存全部更改</button>
 <section class="manage-section"><h2>城市天气</h2><p class="hint">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>高德城市 adcode（必填）<input id="amap_adcode" autocomplete="off" placeholder="例如 320500"></label></div><div class="field"><label>高德 Web 服务 Key<input id="amapWebKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearAmapKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存高德 Key</label><p id="weatherKeyState" class="hint">高德 Key 不会回显</p><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="weatherDiagnostic()">查看天气诊断</button><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
 <section class="manage-section"><h2>代理连通性诊断</h2><p class="hint">使用已保存的第一项启用代理，按真实额度查询路径检查 TCP、HTTP CONNECT 和 TLS；诊断不会回显代理凭据。</p><button onclick="proxyDiagnostic()">检查代理连通性</button><pre id="proxyDiagnostic" class="status">尚未检查</pre></section>
@@ -131,6 +152,7 @@ function showVolume(value){value=Number(value);el("volumeValue").textContent=val
 async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);el("deviceHeap").textContent=heapText(d.free_heap);el("deviceMinHeap").textContent=heapText(d.minimum_free_heap);el("deviceIp").textContent=d.ip||"未联网";var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
+async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
 function renderTodos(){if(!todos.length){el("todos").innerHTML='<div class="empty">暂无待办</div>';return}el("todos").innerHTML=todos.map(function(t){return '<div class="todo-row"><input type="checkbox" '+(t.completed?'checked':'')+' onchange="toggleTodo(\''+t.id+'\',this.checked)"><span>'+esc((t.due_date||'').slice(5)+(t.due_time?' '+t.due_time:''))+'</span><b>'+esc(t.content)+'</b><span><button onclick="editTodo(\''+t.id+'\')">编辑</button> <button class="danger" onclick="deleteTodo(\''+t.id+'\')">删除</button></span></div>'}).join('')}
 async function addTodo(){var content=prompt("待办内容");if(!content)return;var due_date=prompt("日期 YYYY-MM-DD（可留空）","")||"",due_time=prompt("时间 HH:MM（可留空）","")||"";await api("/api/todos",{method:"POST",body:JSON.stringify({content:content,due_date:due_date,due_time:due_time})});toast("待办已添加");loadExtras()}
@@ -379,6 +401,7 @@ bool AdminServer::Start() {
         {"/api/calendar/sync", HTTP_POST, CalendarSyncHandler, this},
         {"/api/api-token", HTTP_GET, ApiTokenHandler, this}, {"/api/api-token", HTTP_POST, ApiTokenHandler, this},
         {"/api/device", HTTP_GET, DeviceHandler, this}, {"/api/device", HTTP_PUT, DeviceHandler, this},
+        {"/api/display/switch", HTTP_POST, DisplaySwitchHandler, this},
     };
     for (const auto& route : routes) httpd_register_uri_handler(server_, &route);
     ESP_LOGI(TAG, "局域网后台已启动: http://<device-ip>:8080/admin");
@@ -625,4 +648,22 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
     if (raw) cJSON_free(raw);
     cJSON_Delete(root);
     return Json(req, out);
+}
+
+esp_err_t AdminServer::DisplaySwitchHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    cJSON* root = cJSON_Parse(body.c_str());
+    cJSON* mode_item = root ? cJSON_GetObjectItem(root, "mode") : nullptr;
+    std::string mode = cJSON_IsString(mode_item) ? mode_item->valuestring : "";
+    if (root) cJSON_Delete(root);
+    // 白名单校验，与 ScheduleDisplaySwitch 的分支一致
+    if (mode != "toggle" && mode != "overview" && mode != "weather" && mode != "calendar" &&
+        mode != "forecast" && mode != "quota") {
+        return Error(req, 400, "无效的页面标识");
+    }
+    ScheduleDisplaySwitch(mode);
+    return Json(req, "{\"ok\":true,\"mode\":\"" + mode + "\"}");
 }

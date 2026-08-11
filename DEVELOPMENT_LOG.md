@@ -6,6 +6,42 @@
 
 ---
 
+## 2026-08-11 — 后台新增"切换显示页面"功能
+
+- **修改内容**：
+  - `main/boards/waveshare-s3-rlcd-4.2/managers/admin_server.h`：加 `DisplaySwitchHandler` 静态方法声明
+  - `main/boards/waveshare-s3-rlcd-4.2/managers/admin_server.cc` 4 处改动：
+    1. 匿名 namespace 新增 `ScheduleDisplaySwitch(mode)` 辅助函数（照搬 `ScheduleTodoDisplayRefresh` 模式，经 `Application::Schedule` 投递到主任务调 `CustomLcdDisplay::SwitchTo*Page` 或 `CycleDisplayMode`）
+    2. `routes[]` 数组注册 `POST /api/display/switch`（路由总数 28→29，仍 ≤ `max_uri_handlers=34`）
+    3. 新增 `DisplaySwitchHandler` 实现：`IsAuthorized(req, true)` Cookie+CSRF 鉴权 → `ReadBody` → cJSON 解析 `mode` → 白名单校验（toggle/overview/weather/calendar/forecast/quota）→ `ScheduleDisplaySwitch` → 返回 `{"ok":true,"mode":"..."}`
+    4. `kAdminHtml` 设备控制区音量行下方新增"显示页面"按钮组（综合/日历/天气/AI/下一页）+ hint 文字；JS 新增 `switchPage(mode)` 函数
+- **修改原因**：用户要求后台支持远程切换显示页面（类似 USER 按钮单击）。mode 白名单与现有 MCP 工具 `self.disp.switch`（`waveshare-s3-rlcd-4.2.cc:358-367`）完全一致，保证 Web/语音/MCP 三入口语义统一。
+- **影响范围**：
+  - 后台前端：设备控制区多一组按钮，登录后点击立即切页
+  - API：新增一条路由，仅接受 Cookie+CSRF（与 `/api/pages`、`/api/quotas` 等纯 Web 路由一致；**未开放 Bearer Token 自动化**——是设计决策，切页命令型操作不需要自动化）
+  - 不改 `custom_lcd_display.{h,cc}`、板级入口、QuotaManager、分区表、Kconfig、依赖
+- **测试结果**：
+  - idf.py build: ✅（增量，仅编译 admin_server.cc + 板级入口；xiaozhi.bin `0x4a8830` → `0x4a9050`，+528 字节，app 分区仍剩 6%）
+  - `git diff --check`: ✅（无 whitespace 错误；本机未安装 clang-format，未跑）
+  - 真机烧录 + 串口观察 70 秒: ✅（0 个 abort/reboot/NO_MEM/watchdog；启动流程完整：NTP→天气 prefetch→小智激活→MQTT→音频→唤醒词→Idle；minimal sram 稳定 3519，与基线一致）
+  - API 鉴权: ✅
+    - 未登录 POST `/api/display/switch` → HTTP 401 `{"error":"未登录"}`
+    - 未登录 + 无效 mode → 仍 401（鉴权优先于参数校验，不泄露路由存在性）
+    - GET `/admin` → 200（HTML 含 5 个 `switchPage('xxx')` 按钮、"显示页面"/"立即切换"文字）
+  - 登录后实际切页: ⏳ 由用户在浏览器访问 `http://192.168.40.116:8080/admin` 自行验证（curl 无法登录因不掌握管理员密码）
+  - app 分区使用率: 6%（无变化）
+- **回滚方式**：`git revert` 本次 commit；或手动删除 admin_server.{h,cc} 的新增内容（4 处都是新增，无修改既有逻辑）
+- **关联文档**：
+  - 更新 `PROJECT_CONTEXT.md` §5.5 API 表（新增 `/api/display/switch` 行）
+  - 遵循 `ARCHITECTURE.md` §7 不变量 #3（后台 IO 经 `Application::Schedule` 投递，不在 HTTP 线程操作 LVGL）
+  - 遵循 `AGENTS.md` §5.2（写路由 `IsAuthorized(req, write=true)`、48KB body 上限、白名单校验、Cookie+CSRF）
+
+### 设计决策（与原计划的小调整）
+
+UI 位置从"PAGE ROUTING 区块下方"改为"设备控制区音量行下方"——实际看到 HTML 后，左侧 aside 已经很拥挤（页面列表 + 保存 + 运行状态 + 刷新间隔 + hint），再加按钮会过载；设备控制区已有"音量控制"这种"立即生效的远程操作"先例，把"显示页面切换"放在它下面语义更一致（都是"立刻对设备做某事"）。
+
+---
+
 ## 2026-08-11 — 提交知识库 + 清理 dataless-backup（2 个 commit）
 
 - **修改内容**：

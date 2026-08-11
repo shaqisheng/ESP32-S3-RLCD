@@ -225,6 +225,7 @@ GET/PUT /api/weather          QWeather/Amap 配置（amap_key 不回显）
 GET/PUT /api/calendar         节假日源
 GET/PUT /api/api-token        读取/写入 token
 GET/PUT /api/device           设备配置
+POST   /api/display/switch    立即切换显示页面（mode: toggle/overview/calendar/forecast/quota）
 GET/POST      /api/todos              待办列表
 GET/PUT/DELETE /api/todos/{id}        单条 CRUD
 ```
