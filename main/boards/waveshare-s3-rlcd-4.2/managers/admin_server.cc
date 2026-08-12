@@ -118,6 +118,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
+<section class="panel"><h2>Wi-Fi 管理</h2><p class="hint">查看当前 Wi-Fi 连接状态。扫描、切换、AP 热点功能后续提供。</p><div class="manage-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>SSID</label><div id="wifiSsid" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>IP 地址</label><div id="wifiIp" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div><div class="manage-grid" style="grid-template-columns:repeat(4,1fr)"><div class="field"><label>信号强度</label><div id="wifiRssi" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>信道</label><div id="wifiChannel" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>MAC 地址</label><div id="wifiMac" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>状态</label><div id="wifiStatus" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div></section>
 <section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
 <section class="panel"><h2>待办 API</h2><p class="hint">局域网客户端使用 Authorization: Bearer &lt;token&gt;，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p><div id="apiToken" class="api-token">读取中…</div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="regenToken()">重新生成 Token</button></div></section>
 </div>
@@ -186,7 +187,7 @@ function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=e
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
 function uptimeText(seconds){seconds=Number(seconds||0);var d=Math.floor(seconds/86400),h=Math.floor(seconds%86400/3600),m=Math.floor(seconds%3600/60);return (d?d+"天 ":"")+h+"小时 "+m+"分"}
 function showVolume(value){value=Number(value);el("volumeValue").textContent=value+"%";el("muteBtn").textContent=value===0?"恢复":"静音"}
-async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);setMem("deviceHeap",d.free_heap,true);setMem("deviceMinHeap",d.minimum_free_heap,true);setMem("devicePsram",d.free_psram,false);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceBattery").textContent=(d.battery_level==null||d.battery_level<0)?"未检测":(d.battery_level+"%"+(d.battery_charging?" 充电":(d.battery_discharging?" 放电":"")));el("deviceTemp").textContent=(d.temperature_c==null)?"--":(Number(d.temperature_c).toFixed(1)+" °C");el("deviceHumi").textContent=(d.humidity_pct==null)?"--":(Number(d.humidity_pct).toFixed(0)+" %");el("deviceSd").textContent=d.sd_mounted?(sizeText(d.sd_free_bytes)+" / "+sizeText(d.sd_total_bytes)):"未挂载";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · CPU "+(d.cpu_freq_mhz||"?")+" MHz · 蓝牙 "+(d.bluetooth_enabled?"已启用":"未启用")+" · MAC "+(d.mac||"?");var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
+async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);setMem("deviceHeap",d.free_heap,true);setMem("deviceMinHeap",d.minimum_free_heap,true);setMem("devicePsram",d.free_psram,false);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceBattery").textContent=(d.battery_level==null||d.battery_level<0)?"未检测":(d.battery_level+"%"+(d.battery_charging?" 充电":(d.battery_discharging?" 放电":"")));el("deviceTemp").textContent=(d.temperature_c==null)?"--":(Number(d.temperature_c).toFixed(1)+" °C");el("deviceHumi").textContent=(d.humidity_pct==null)?"--":(Number(d.humidity_pct).toFixed(0)+" %");el("deviceSd").textContent=d.sd_mounted?(sizeText(d.sd_free_bytes)+" / "+sizeText(d.sd_total_bytes)):"未挂载";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · CPU "+(d.cpu_freq_mhz||"?")+" MHz · 蓝牙 "+(d.bluetooth_enabled?"已启用":"未启用")+" · MAC "+(d.mac||"?");var connected=d.wifi_ssid&&d.wifi_ssid.length>0;el("wifiSsid").textContent=connected?d.wifi_ssid:"未连接";el("wifiIp").textContent=d.ip||"--";el("wifiRssi").textContent=connected?(d.wifi_rssi+" dBm"):"--";el("wifiChannel").textContent=connected?d.wifi_channel:"--";el("wifiMac").textContent=d.mac||"--";el("wifiStatus").textContent=connected?"已连接":"未连接";var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
 async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
@@ -516,7 +517,18 @@ bool AdminServer::Start() {
 esp_err_t AdminServer::PageHandler(httpd_req_t* req) {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, kAdminHtml, HTTPD_RESP_USE_STRLEN);
+    // kAdminHtml 已超过 40KB，单次 httpd_resp_send 在网络慢时会截断。
+    // 改用 chunked send（每 4KB 一次），httpd 内部会分 TCP 段发出。
+    const size_t kChunk = 4096;
+    const size_t total = strlen(kAdminHtml);
+    for (size_t offset = 0; offset < total; offset += kChunk) {
+        const size_t n = std::min(kChunk, total - offset);
+        if (httpd_resp_send_chunk(req, kAdminHtml + offset, n) != ESP_OK) {
+            httpd_resp_send_chunk(req, nullptr, 0);  // 结束 chunked 响应
+            return ESP_FAIL;
+        }
+    }
+    return httpd_resp_send_chunk(req, nullptr, 0);
 }
 
 esp_err_t AdminServer::SetupHandler(httpd_req_t* req) {
@@ -751,6 +763,8 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
     cJSON_AddNumberToObject(root, "minimum_free_heap", esp_get_minimum_free_heap_size());
     cJSON_AddNumberToObject(root, "free_psram", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     cJSON_AddNumberToObject(root, "wifi_rssi", wifi.IsConnected() ? wifi.GetRssi() : 0);
+    cJSON_AddStringToObject(root, "wifi_ssid", wifi.IsConnected() ? wifi.GetSsid().c_str() : "");
+    cJSON_AddNumberToObject(root, "wifi_channel", wifi.IsConnected() ? wifi.GetChannel() : 0);
     cJSON_AddStringToObject(root, "ip", wifi.GetIpAddress().c_str());
     cJSON_AddStringToObject(root, "firmware_version", esp_app_get_description()->version);
     const esp_partition_t* running = esp_ota_get_running_partition();
