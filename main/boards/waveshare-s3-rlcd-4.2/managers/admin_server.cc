@@ -4,7 +4,11 @@
 #include <vector>
 
 #include <cJSON.h>
+#include <esp_app_desc.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_ota_ops.h>
+#include <esp_psram.h>
 #include <esp_random.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -12,6 +16,7 @@
 #include <nvs.h>
 
 #include "quota_manager.h"
+#include "system_info.h"
 #include "todo_manager.h"
 #include "weather_manager.h"
 #include "calendar_manager.h"
@@ -88,7 +93,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section id="dashboard" class="hidden">
 <div class="tabs"><div class="tab active" data-tab="overview" onclick="switchTab('overview')">概览</div><div class="tab" data-tab="accounts" onclick="switchTab('accounts')">AI 账号</div><div class="tab" data-tab="integ" onclick="switchTab('integ')">集成</div><div class="tab" data-tab="system" onclick="switchTab('system')">系统</div></div>
 <div class="tab-pane active" data-pane="overview">
-<section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用内存</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低内存</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div></div><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面 · 立即切换</label><div class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"><button onclick="switchPage('overview')">综合</button><button onclick="switchPage('calendar')">日历</button><button onclick="switchPage('forecast')">天气</button><button onclick="switchPage('quota')">AI</button><button onclick="switchPage('toggle')">下一页</button></div><p class="hint">立即切换设备屏幕到对应页面，与 USER 按钮单击等效</p></section>
+<section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用 SRAM</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低 SRAM</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>可用 PSRAM</small><b id="devicePsram">--</b></div><div class="device-stat"><small>WiFi 信号</small><b id="deviceRssi">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div><div class="device-stat"><small>固件版本</small><b id="deviceFw">--</b></div><div class="device-stat"><small>运行分区</small><b id="devicePartition">--</b></div></div><p class="hint" id="deviceMeta" style="margin:0 0 14px">芯片 -- · Flash -- · MAC --</p><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面 · 立即切换</label><div class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"><button onclick="switchPage('overview')">综合</button><button onclick="switchPage('calendar')">日历</button><button onclick="switchPage('forecast')">天气</button><button onclick="switchPage('quota')">AI</button><button onclick="switchPage('toggle')">下一页</button></div><p class="hint">立即切换设备屏幕到对应页面，与 USER 按钮单击等效</p></section>
 <section class="panel"><h2>页面编排</h2><div id="pages"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="primary" id="savePages">保存页面顺序</button></div></section>
 <section class="panel"><h2>运行状态</h2><div id="runStatus" class="status">读取状态…</div></section>
 </div>
@@ -166,10 +171,10 @@ async function boot(){try{var s=await api("/api/status");if(s.setup_required){sh
 async function login(){var p=el("password").value;if(p.length<8){toast("密码至少 8 位",true);return}try{var d=await api(setupMode?"/api/setup":"/api/login",{method:"POST",body:JSON.stringify({password:p})});csrf=d.csrf||"";el("password").value="";showDash();await loadAll()}catch(e){toast(e.message,true)}}
 async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages");items=q.items||[];items.forEach(keyFor);pages=p.pages||[];editingKey="";dirty=false;el("saveQuotas").textContent="保存全部更改";renderPages();renderQuotas();await loadExtras();await status()}
 async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("amap_adcode").value=w.amap_adcode||"";el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice()}
-function heapText(bytes){return (Number(bytes||0)/1024).toFixed(1)+" KiB"}
+function heapText(bytes){var b=Number(bytes||0);if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MiB";return (b/1024).toFixed(1)+" KiB"}
 function uptimeText(seconds){seconds=Number(seconds||0);var d=Math.floor(seconds/86400),h=Math.floor(seconds%86400/3600),m=Math.floor(seconds%3600/60);return (d?d+"天 ":"")+h+"小时 "+m+"分"}
 function showVolume(value){value=Number(value);el("volumeValue").textContent=value+"%";el("muteBtn").textContent=value===0?"恢复":"静音"}
-async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);el("deviceHeap").textContent=heapText(d.free_heap);el("deviceMinHeap").textContent=heapText(d.minimum_free_heap);el("deviceIp").textContent=d.ip||"未联网";var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
+async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);el("deviceHeap").textContent=heapText(d.free_heap);el("deviceMinHeap").textContent=heapText(d.minimum_free_heap);el("devicePsram").textContent=heapText(d.free_psram);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · MAC "+(d.mac||"?");var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
 async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
@@ -662,12 +667,21 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
     }
 
     auto* codec = Board::GetInstance().GetAudioCodec();
+    auto& wifi = WifiManager::GetInstance();
     cJSON* root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "volume", codec ? codec->output_volume() : 0);
     cJSON_AddNumberToObject(root, "uptime_seconds", esp_timer_get_time() / 1000000LL);
     cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
     cJSON_AddNumberToObject(root, "minimum_free_heap", esp_get_minimum_free_heap_size());
-    cJSON_AddStringToObject(root, "ip", WifiManager::GetInstance().GetIpAddress().c_str());
+    cJSON_AddNumberToObject(root, "free_psram", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    cJSON_AddNumberToObject(root, "wifi_rssi", wifi.IsConnected() ? wifi.GetRssi() : 0);
+    cJSON_AddStringToObject(root, "ip", wifi.GetIpAddress().c_str());
+    cJSON_AddStringToObject(root, "firmware_version", esp_app_get_description()->version);
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    cJSON_AddStringToObject(root, "running_partition", running ? running->label : "?");
+    cJSON_AddStringToObject(root, "chip_model", SystemInfo::GetChipModelName().c_str());
+    cJSON_AddNumberToObject(root, "flash_size_mb", SystemInfo::GetFlashSize() / 1024 / 1024);
+    cJSON_AddStringToObject(root, "mac", SystemInfo::GetMacAddress().c_str());
     char* raw = cJSON_PrintUnformatted(root);
     std::string out = raw ? raw : "{}";
     if (raw) cJSON_free(raw);
