@@ -53,9 +53,12 @@ void CustomLcdDisplay::SetupTodoUI() {
     MakePlain(todo_header_strip_, lv_color_black());
 
     todo_header_label_ = lv_label_create(todo_page_);
-    lv_obj_set_pos(todo_header_label_, 12, 8);
-    lv_obj_set_size(todo_header_label_, 376, 32);
-    lv_obj_set_style_text_font(todo_header_label_, &alibaba_puhui_24, 0);
+    lv_obj_set_pos(todo_header_label_, 12, 14);
+    lv_obj_set_size(todo_header_label_, 376, 24);
+    // 用 font_puhui_16_4 而不是 alibaba_puhui_24——后者是上游子集字体，
+    // 不含"办""暂"等字，导致"待办 · 暂无未完成"被裁成"待 无未完成"。
+    // font_puhui_16_4 被 calendar/forecast 用于中文（农历/城市名），覆盖全。
+    lv_obj_set_style_text_font(todo_header_label_, &font_puhui_16_4, 0);
     lv_obj_set_style_text_color(todo_header_label_, lv_color_white(), 0);
     lv_label_set_text(todo_header_label_, "待办");
 
