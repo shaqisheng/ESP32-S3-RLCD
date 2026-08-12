@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RLCD CONTROL · Mockup v2（原版+Tab）</title>
+<style>
+/* ============ 100% 复用原版的 CSS 变量与基础样式 ============ */
+:root{--ink:#10110f;--paper:#f1efe6;--signal:#ddff35;--muted:#72756d;--line:#20221d;--bad:#b93127;--good:#4e792c}*{box-sizing:border-box}
+body{margin:0;background:#10110f;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,"PingFang SC",monospace;letter-spacing:.02em}
+.shell{max-width:1120px;margin:auto;min-height:100vh;background:var(--paper);border-left:1px solid #45483f;border-right:1px solid #45483f}
+header{padding:18px 22px;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:space-between;border-bottom:6px solid var(--signal)}
+.brand{font-size:22px;font-weight:900;letter-spacing:.12em}.brand i{font-style:normal;color:var(--signal)}.meta{font-size:12px;color:#aeb2a6;text-align:right}
+main{padding:22px}
+h1,h2,h3,p{margin-top:0}h2{font-size:15px;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid;padding-bottom:8px}
+.panel{border:2px solid var(--line);background:#fff;padding:16px;margin-bottom:14px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin-bottom:14px}
+button{font:inherit;font-weight:800;border:2px solid var(--line);background:var(--paper);padding:9px 13px;cursor:pointer;box-shadow:3px 3px 0 var(--line)}button:hover{background:var(--signal)}button.primary{background:var(--signal)}button.danger{color:var(--bad)}button:active{transform:translate(2px,2px);box-shadow:1px 1px 0}
+input,select{width:100%;font:inherit;border:1px solid var(--line);border-radius:0;background:#faf9f3;padding:8px;margin-top:5px}label{font-size:11px;font-weight:800;color:#484b44;text-transform:uppercase}.field{margin-bottom:10px}
+.page-row{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:8px;border-bottom:1px dashed #aaa;padding:10px 2px}.page-row input{margin:0;width:18px;height:18px}.arrows button{padding:3px 7px;box-shadow:none}
+.badge{font-size:10px;background:var(--ink);color:var(--signal);padding:3px 6px}
+.status{padding:8px 10px;background:#dad8ce;font-size:12px;border-left:5px solid var(--muted)}.status.ok{border-color:var(--good)}.hint{color:var(--muted);font-size:12px;line-height:1.6}
+.state{font-size:10px;font-weight:900;padding:3px 6px;border:1px solid}.state.ok{background:var(--signal)}.state.error{color:var(--bad);border-color:var(--bad)}.state.stale{border-style:dashed}
+.device-control{margin-bottom:14px;border:2px solid var(--line);background:#f1f0e9;padding:14px}
+.device-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:14px}.device-stat{background:#fff;padding:9px}.device-stat small{display:block;color:var(--muted);font-size:9px}.device-stat b{font-size:13px}
+.volume-row{display:grid;grid-template-columns:1fr 54px auto auto;gap:8px;align-items:center}.volume-row input{margin:0}.volume-row button{padding:6px 9px;box-shadow:none}
+.todo-row{display:grid;grid-template-columns:24px 82px 1fr auto;gap:7px;align-items:center;padding:8px 0;border-bottom:1px dashed #999}.todo-row input{margin:0}
+
+/* ============ 新增：Tab 栏（极客风，黄下划线激活态） ============ */
+.tabs{
+  display:flex;gap:0;border-bottom:2px solid var(--line);
+  margin-bottom:18px;overflow-x:auto;
+}
+.tab{
+  padding:11px 18px;font:inherit;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);cursor:pointer;
+  border-bottom:4px solid transparent;margin-bottom:-2px;
+  transition:color .12s,border-color .12s;white-space:nowrap;
+}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--ink);border-bottom-color:var(--signal)}
+.tab .count{
+  display:inline-block;margin-left:6px;font-size:10px;background:var(--ink);
+  color:var(--signal);padding:2px 5px;font-weight:900;
+}
+
+/* ============ 新增：按钮 loading / success 态（极客风） ============ */
+button.loading{pointer-events:none;background:var(--muted)!important;color:var(--paper)!important}
+button.success{background:var(--good)!important;color:#fff!important;border-color:var(--good)!important}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============ 新增：模态框（替换 prompt，套原版皮肤） ============ */
+.modal-bg{position:fixed;inset:0;background:rgba(16,17,15,0.6);display:none;align-items:center;space-around;justify-content:center;z-index:100;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--paper);border:2px solid var(--line);box-shadow:8px 8px 0 var(--signal);padding:22px;width:480px;max-width:100%}
+.modal h3{font-size:15px;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid;padding-bottom:8px;margin-bottom:16px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px dashed #aaa}
+
+/* ============ Toast（原版风格） ============ */
+.toast{position:fixed;right:18px;bottom:18px;background:var(--ink);color:var(--paper);border-left:7px solid var(--signal);padding:12px 16px;max-width:380px;z-index:200;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:translateY(0)}.toast.bad{border-left-color:var(--bad)}
+
+.tab-pane{display:none}.tab-pane.active{display:block}
+@media(max-width:760px){.device-stats{grid-template-columns:1fr 1fr}.volume-row{grid-template-columns:1fr 46px}.volume-row button{width:100%}}
+</style></head><body>
+<div class="shell">
+<header>
+  <div class="brand">RLCD <i>/</i> CONTROL <span style="font-size:11px;color:#aeb2a6;font-weight:400;margin-left:8px">· mockup v2（原版 + Tab）</span></div>
+  <div class="meta"><span id="ip">192.168.40.116</span><br><span id="clock">18:42</span></div>
+</header>
+
+<main>
+  <!-- 顶部工具条（原版保留） -->
+  <div class="toolbar">
+    <div><b>设备管理后台</b><div class="hint">按主次分类，常用功能放前面</div></div>
+    <div><button>立即刷新</button> <button>退出</button></div>
+  </div>
+
+  <!-- 新增：Tab 栏 -->
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">概览</div>
+    <div class="tab" data-tab="accounts">AI 账号 <span class="count">3</span></div>
+    <div class="tab" data-tab="integ">集成</div>
+    <div class="tab" data-tab="system">系统</div>
+  </div>
+
+  <!-- ==================== TAB 概览 ==================== -->
+  <section class="tab-pane active" data-pane="overview">
+
+    <section class="device-control panel">
+      <h2>设备控制</h2>
+      <div class="device-stats">
+        <div class="device-stat"><small>运行时间</small><b>3天 2小时</b></div>
+        <div class="device-stat"><small>可用内存</small><b>18.7 KiB</b></div>
+        <div class="device-stat"><small>最低内存</small><b>3.5 KiB</b></div>
+        <div class="device-stat"><small>网络地址</small><b>192.168.40.116</b></div>
+      </div>
+      <label>扬声器音量</label>
+      <div class="volume-row">
+        <input type="range" min="0" max="100" value="60" oninput="this.nextElementSibling.textContent=this.value+'%'">
+        <b>60%</b>
+        <button onclick="demoBtn(this)">应用</button>
+        <button>静音</button>
+      </div>
+      <hr style="margin:14px 0;border:0;border-top:1px dashed #aaa">
+      <label>显示页面 · 立即切换</label>
+      <div class="toolbar" style="margin:8px 0 0;justify-content:flex-start">
+        <button onclick="demoBtn(this,'已切换：综合')">综合</button>
+        <button onclick="demoBtn(this,'已切换：日历')">日历</button>
+        <button onclick="demoBtn(this,'已切换：天气')">天气</button>
+        <button onclick="demoBtn(this,'已切换：AI')">AI</button>
+        <button onclick="demoBtn(this,'已切换：下一页')">下一页</button>
+      </div>
+      <p class="hint" style="margin-top:8px">与 USER 按钮单击等效，点击后设备屏幕立即切换。</p>
+    </section>
+
+    <section class="panel">
+      <h2>页面编排</h2>
+      <div class="page-row"><input type="checkbox" checked><b>综合</b><span class="arrows"><button>↑</button> <button>↓</button></span></div>
+      <div class="page-row"><input type="checkbox" checked><b>日历</b><span class="arrows"><button>↑</button> <button>↓</button></span></div>
+      <div class="page-row"><input type="checkbox" checked><b>天气</b><span class="arrows"><button>↑</button> <button>↓</button></span></div>
+      <div class="page-row"><input type="checkbox"><b>AI</b><span class="arrows"><button>↑</button> <button>↓</button></span></div>
+      <div class="toolbar" style="margin-top:14px;justify-content:space-between">
+        <button class="primary" onclick="demoBtn(this,'页面顺序已保存')">保存页面顺序</button>
+        <span class="hint">默认 5 分钟自动刷新</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>运行状态</h2>
+      <div class="status ok">上次全部成功：2026-08-12 18:38:42 · 下次约 2 分钟后</div>
+    </section>
+  </section>
+
+  <!-- ==================== TAB AI 账号 ==================== -->
+  <section class="tab-pane" data-pane="accounts">
+    <div class="toolbar">
+      <h2 style="border:0;margin:0">ACCOUNT MANAGEMENT <span class="badge">3 / 32</span></h2>
+      <div><button>放弃修改</button> <button>＋ 添加账号</button></div>
+    </div>
+
+    <section class="panel" style="padding:14px">
+      <div class="toolbar" style="margin:0;justify-content:space-between">
+        <div><b>Codex 主账号</b> <span class="badge">Codex</span> <span class="state ok">正常</span></div>
+        <div><button>管理</button> <button>停用</button> <button>↑</button> <button>↓</button> <button class="danger">删除</button></div>
+      </div>
+    </section>
+
+    <section class="panel" style="padding:14px">
+      <div class="toolbar" style="margin:0;justify-content:space-between">
+        <div><b>Kimi 编程</b> <span class="badge">Kimi</span> <span class="state stale">旧数据</span></div>
+        <div><button>管理</button> <button>停用</button> <button>↑</button> <button>↓</button> <button class="danger">删除</button></div>
+      </div>
+    </section>
+
+    <section class="panel" style="padding:14px;opacity:.58">
+      <div class="toolbar" style="margin:0;justify-content:space-between">
+        <div><b>DeepSeek 备用</b> <span class="badge">DeepSeek</span> <span class="state">已停用</span></div>
+        <div><button>管理</button> <button>启用</button> <button>↑</button> <button>↓</button> <button class="danger">删除</button></div>
+      </div>
+    </section>
+
+    <button class="primary" style="width:100%;margin-top:8px" onclick="demoBtn(this,'账号已保存，准备刷新')">保存全部更改</button>
+  </section>
+
+  <!-- ==================== TAB 集成 ==================== -->
+  <section class="tab-pane" data-pane="integ">
+    <section class="panel">
+      <h2>城市天气</h2>
+      <p class="hint" style="margin-top:0">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。</p>
+      <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label>省份</label><select><option>江苏省</option></select></div>
+        <div><label>城市</label><select><option>苏州市</option></select></div>
+      </div>
+      <div class="field"><label>高德城市 adcode</label><input value="320500"></div>
+      <div class="field"><label>高德 Web 服务 Key（不回显）</label><input type="password" placeholder="留空保留"></div>
+      <div class="field"><label>天气自动刷新（分钟）</label><input type="number" value="15"></div>
+      <div class="toolbar" style="justify-content:flex-start"><button class="primary" onclick="demoBtn(this,'天气配置已保存')">保存并立即检测</button> <button>查看天气诊断</button></div>
+    </section>
+
+    <section class="panel">
+      <h2>日历与节假日</h2>
+      <div class="field"><label>年度 JSON 数据源</label><input value="https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/{year}.json"></div>
+      <div class="status ok" style="margin:8px 0">已缓存 2026 年数据</div>
+      <div class="toolbar" style="justify-content:flex-start"><button onclick="demoBtn(this,'数据源已保存')">保存数据源</button> <button class="primary" onclick="demoBtn(this,'节假日同步完成')">立即同步</button></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar"><h2 style="border:0;margin:0">待办事项 <span class="badge">2</span></h2><button onclick="openModal()">＋ 新增待办</button></div>
+      <div class="todo-row"><input type="checkbox"><span style="font-size:12px;color:var(--muted)">08-15 09:00</span><b>给花浇水</b><span><button onclick="openModal()" style="padding:4px 8px;box-shadow:none">编辑</button> <button class="danger" style="padding:4px 8px;box-shadow:none">删除</button></span></div>
+      <div class="todo-row"><input type="checkbox"><span style="font-size:12px;color:var(--muted)">08-20</span><b>提交月度报告</b><span><button onclick="openModal()" style="padding:4px 8px;box-shadow:none">编辑</button> <button class="danger" style="padding:4px 8px;box-shadow:none">删除</button></span></div>
+      <p class="hint" style="margin-top:8px">新增/编辑走统一模态框，替换浏览器原生 prompt() 弹窗。</p>
+    </section>
+  </section>
+
+  <!-- ==================== TAB 系统 ==================== -->
+  <section class="tab-pane" data-pane="system">
+    <section class="panel">
+      <h2>代理连通性诊断</h2>
+      <p class="hint" style="margin-top:0">使用已保存的第一项启用代理，按真实额度查询路径检查 TCP、HTTP CONNECT 和 TLS；诊断不会回显代理凭据。</p>
+      <button onclick="demoBtn(this,'代理诊断已完成')">检查代理连通性</button>
+      <pre class="status" style="margin-top:14px">尚未检查</pre>
+    </section>
+
+    <section class="panel">
+      <h2>待办 API Token</h2>
+      <p class="hint" style="margin-top:0">局域网客户端使用 Authorization: Bearer &lt;token&gt;。</p>
+      <div style="word-break:break-all;background:#111;color:var(--signal);padding:8px;font-size:11px;font-family:ui-monospace,monospace">a4cb8fd0e72b9f3c1a8d4e6f2b1c9a7e8d5f3c2b1a6e9d7f4c8b5a2e3f1d6c9</div>
+      <div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="demoBtn(this,'Token 已重新生成')">重新生成 Token</button></div>
+    </section>
+
+    <section class="panel">
+      <h2>关于</h2>
+      <div class="hint" style="margin-top:0">
+        固件版本 <b style="color:var(--ink)">2.2.2</b> · 运行分区 <b style="color:var(--ink)">ota_0</b><br>
+        App 分区余量 <b style="color:var(--ink)">6%</b> · 后台端口 <b style="color:var(--ink)">8080</b>
+      </div>
+    </section>
+  </section>
+
+</main>
+</div>
+
+<!-- 模态框（套原版皮肤） -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h3>编辑待办</h3>
+    <div class="field"><label>内容</label><input value="给花浇水"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field"><label>日期（可留空）</label><input value="2026-08-15"></div>
+      <div class="field"><label>时间（可留空）</label><input value="09:00"></div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">取消</button>
+      <button class="primary" onclick="saveTodo(this)">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Tab 切换
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelector(`[data-pane="${t.dataset.tab}"]`).classList.add('active');
+  };
+});
+// 按钮 loading → success 演示
+function demoBtn(btn,msg){
+  const original=btn.innerHTML;
+  btn.classList.add('loading');
+  btn.innerHTML='<span class="spinner"></span>';
+  setTimeout(()=>{
+    btn.classList.remove('loading');
+    btn.classList.add('success');
+    btn.innerHTML='✓';
+    if(msg)toast(msg);
+    setTimeout(()=>{btn.classList.remove('success');btn.innerHTML=original},1100);
+  },650);
+}
+function openModal(){document.getElementById('modal').classList.add('open')}
+function closeModal(){document.getElementById('modal').classList.remove('open')}
+function saveTodo(btn){demoBtn(btn,'待办已保存');setTimeout(closeModal,650)}
+function toast(s,bad){const t=document.getElementById('toast');t.textContent=s;t.classList.toggle('bad',!!bad);t.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),2400)}
+document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+</script>
+</body></html>

@@ -6,6 +6,46 @@
 
 ---
 
+## 2026-08-12 — 后台 UI 重构：Tab 分组 + 按钮 loading 态 + 待办模态框
+
+- **修改内容**：仅改 `admin_server.cc` 的 `kAdminHtml` 字符串（45 行 diff）
+  - CSS：新增 `.tabs/.tab/.tab-pane`（黄下划线激活态，复用 `--signal`）、`button.loading/success` + `.spinner`、`.modal-bg/.modal/.modal-actions`
+  - HTML：废弃原 `.grid > aside + article` 两栏布局；改为顶部 4 个 Tab + 4 个 `.tab-pane`
+    - **概览**：设备控制（含切页按钮）+ 页面编排 + 运行状态
+    - **AI 账号**：账号管理 + AI 自动刷新 + 代理诊断
+    - **集成**：城市天气 + 日历节假日 + 待办
+    - **系统**：待办 API Token
+  - 新增待办模态框 HTML（替换 6 处 `prompt()` 调用）
+  - JS：新增 `switchTab(name)` / `withFeedback(btn, fn, msg)`（按钮 loading→✓→恢复，乐观反馈）/ `openTodoModal(id)` / `closeTodoModal()` / `submitTodoModal()`；改写 `addTodo` 和 `editTodo` 调用模态框
+  - 模态框支持 Esc 关闭 + 点击背景关闭
+- **修改原因**：用户反馈"样式不好看 + 交互不流畅"。经过 8 轮 grill-me 明确真实需求：(1) 解决"点了不知道成功没"——根因是缺乐观更新和按钮态；(2) 替换待办 `prompt()` 弹窗；(3) 信息层级混乱——8 个区块一滚到底。决策路径：用户先选 Apple Settings-like → v1 mockup 出来后"不如原版" → 改回原版极客风（黑/纸白/荧光黄/monospace/硬阴影），只加 Tab + 交互改进，**不动整体审美**。
+- **影响范围**：
+  - 保留：CSS 变量、配色、字体、按钮硬阴影、header 黄色分隔条、所有组件级样式（page-row/quota/device-stats 等）
+  - 新增：Tab 栏、模态框、按钮 loading/success 视觉态、乐观反馈机制
+  - 不变：所有 API 路由、所有 manager 代码、所有 NVS schema、`api()` 封装、`status()` 轮询逻辑、cityCatalog/providerLogos 数据
+- **测试结果**：
+  - idf.py build: ✅（增量，9 步；xiaozhi.bin `0x4a9050` → `0x4aa1e0`，+4528 字节）
+  - app 分区使用率: 6%（无变化）
+  - kAdminHtml: 31345 → 35767 字节（+4422，在 +20KB 预算内）
+  - `git diff --check`: ✅
+  - 真机烧录 + 串口观察 65 秒: ✅（0 异常关键词；完整启动 NTP→天气→激活→MQTT→音频→唤醒词→Idle；Open-Meteo 七日天气正常加载；minimal sram 2855-19427 范围波动，与基线一致）
+  - 后台 HTML 静态验证: ✅（HTTP 200；1 个 .tabs；4 个 .tab-pane；4 个 data-tab；1 个 #todoModal；withFeedback/switchTab/openTodoModal 函数都注册；**0 处残留 `prompt(`**）
+  - 浏览器实际操作（tab 切换、按钮 loading、模态框增删改）: ⏳ 由用户在浏览器 `http://192.168.40.116:8080/admin` 实测
+- **回滚方式**：`git revert` 本次 commit；或恢复 kAdminHtml 字符串（所有改动集中在 raw string 内，不影响 C++ 逻辑）
+- **关联文档**：
+  - `docs/mockups/admin-redesign-v1.html`（被否决的 Apple Settings 风格，保留作参考）
+  - `docs/mockups/admin-redesign-v2.html`（采纳的"原版+Tab"草稿，本次实施基准）
+  - 遵守 AGENTS §5.2（不破坏 ARCHITECTURE §7 不变量；不引入新依赖；不改 manager 代码）
+
+### 设计决策小记（grill-me 留档）
+
+1. **保留原版极客风**：用户在抽象选项里勾选 "Apple Settings-like"，但看到 v1 mockup 后明确表示"不如原版"。教训：抽象偏好问题需要用具体 mockup 验证，不能直接信抽象回答。
+2. **不引入 gzip embed**：原本"bin 净增长 ≤ +20KB"是约束。最终只 +4.5KB，远低于预算，gzip embed 没必要（增加复杂度换不回多少收益）。
+3. **保留多保存按钮工作流**：grill-me 中用户明确**未选** "多个独立保存按钮"为痛点，故不强行做"全局保存"或"自动保存"。
+4. **保留组件细节不抛光**：用户明确**未选** "组件粗糙"，所以不动 button/input/border-radius 等细节样式。
+
+---
+
 ## 2026-08-11 — 后台新增"切换显示页面"功能
 
 - **修改内容**：

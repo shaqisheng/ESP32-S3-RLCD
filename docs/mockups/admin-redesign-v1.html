@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RLCD Control · Mockup v1</title>
+<style>
+/* ============ Apple Settings-like 设计令牌 ============ */
+:root{
+  --bg:#f5f5f7;            /* Apple 灰底 */
+  --card:#ffffff;          /* 卡片白 */
+  --border:#d2d2d7;        /* 卡片细边 */
+  --border-hi:#86868b;     /* 强调边 */
+  --ink:#1d1d1f;           /* 主文本（Apple 近黑） */
+  --ink-2:#6e6e73;         /* 次文本 */
+  --ink-3:#86868b;         /* 三级文本 */
+  --accent:#0071e3;        /* Apple 蓝（替换荧光黄） */
+  --accent-hi:#0077ed;
+  --ok:#1d9b51;
+  --bad:#d94545;
+  --warn:#b07b00;
+  --radius:10px;
+  --radius-sm:6px;
+  --shadow:0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang SC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+}
+
+/* ============ 顶部 brand bar ============ */
+.topbar{
+  background:rgba(255,255,255,0.8);backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;
+}
+.topbar-inner{
+  max-width:1080px;margin:0 auto;padding:12px 24px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.brand{font-size:17px;font-weight:600;letter-spacing:-0.01em}
+.brand i{font-style:normal;color:var(--accent)}
+.meta{font-size:12px;color:var(--ink-3);text-align:right}
+
+/* ============ Tab 栏 ============ */
+.tabs{
+  max-width:1080px;margin:0 auto;padding:0 24px;
+  display:flex;gap:24px;border-bottom:1px solid var(--border);
+}
+.tab{
+  padding:14px 0;font-size:14px;font-weight:500;color:var(--ink-2);
+  border-bottom:2px solid transparent;cursor:pointer;
+  transition:color .15s,border-color .15s;
+}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--ink);border-color:var(--accent);font-weight:600}
+
+/* ============ 主区 ============ */
+main{max-width:1080px;margin:0 auto;padding:24px}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ============ 卡片（轻边框 + 圆角 + 弱阴影） ============ */
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:18px 20px;margin-bottom:14px;
+}
+.card h2{
+  margin:0 0 14px;font-size:13px;font-weight:600;
+  color:var(--ink-2);letter-spacing:0.04em;text-transform:uppercase;
+}
+.card .hint{font-size:12px;color:var(--ink-3);margin:6px 0 0;line-height:1.55}
+
+/* ============ 统计网格 ============ */
+.stat-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--border);border:1px solid var(--border);
+  border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px;
+}
+.stat{background:#fff;padding:12px 14px}
+.stat small{display:block;color:var(--ink-3);font-size:11px;margin-bottom:4px}
+.stat b{font-size:14px;font-weight:600;color:var(--ink)}
+
+/* ============ 字段（label 在上、input 在下，iOS 风格） ============ */
+.row{display:grid;gap:14px}
+.row.two{grid-template-columns:1fr 1fr}
+.row.three{grid-template-columns:repeat(3,1fr)}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--ink-2);
+  text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px}
+.field input,.field select{
+  width:100%;font:inherit;color:var(--ink);
+  background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:8px 10px;outline:none;transition:border-color .15s;
+}
+.field input:focus,.field select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.15)}
+
+/* ============ 按钮（Apple 风） ============ */
+button{
+  font:inherit;font-weight:500;border:1px solid var(--border);
+  background:#fff;color:var(--ink);padding:7px 14px;border-radius:var(--radius-sm);
+  cursor:pointer;transition:all .12s;display:inline-flex;align-items:center;gap:6px;
+}
+button:hover{background:#f5f5f7}
+button:active{transform:scale(0.98)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{background:var(--accent-hi)}
+button.danger{color:var(--bad)}
+button.danger:hover{background:#fef5f5}
+button:disabled{opacity:.6;cursor:default}
+button.loading{pointer-events:none;color:var(--ink-2)!important}
+button.success{background:var(--ok);border-color:var(--ok);color:#fff}
+.spinner{
+  width:14px;height:14px;border:2px solid var(--ink-3);border-top-color:transparent;
+  border-radius:50%;animation:spin .8s linear infinite;display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+
+/* ============ 音量条 ============ */
+.vol-row{display:grid;grid-template-columns:1fr 60px auto;gap:10px;align-items:center}
+.vol-row input[type=range]{width:100%;accent-color:var(--accent)}
+.vol-row b{font-variant-numeric:tabular-nums;font-weight:600}
+
+/* ============ 页面编排 / 待办 列表行 ============ */
+.list-row{
+  display:grid;align-items:center;gap:10px;
+  padding:10px 0;border-bottom:1px solid #eee;
+}
+.list-row:last-child{border-bottom:0}
+.list-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.page-row{grid-template-columns:24px 1fr auto}
+.page-row .name{font-weight:500}
+.todo-row{grid-template-columns:24px 110px 1fr auto}
+.todo-row .due{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.todo-row .content{font-weight:500}
+.todo-row .actions{display:flex;gap:4px}
+.todo-row .actions button{padding:4px 9px;font-size:12px}
+
+/* ============ 状态徽章 ============ */
+.badge{
+  display:inline-block;font-size:11px;font-weight:600;
+  padding:2px 8px;border-radius:10px;background:#e8e8ed;color:var(--ink-2);
+}
+.badge.ok{background:#d5f5e3;color:var(--ok)}
+.badge.err{background:#fce8e8;color:var(--bad)}
+.badge.stale{background:#fff4d6;color:var(--warn)}
+.badge.pending{background:#e8e8ed;color:var(--ink-2)}
+
+/* ============ 账号卡片 ============ */
+.acct{
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  margin-bottom:10px;overflow:hidden;
+}
+.acct.disabled{opacity:.6}
+.acct-head{
+  display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+  padding:12px 14px;background:#fafafa;
+}
+.acct-id{display:flex;align-items:center;gap:8px;min-width:0}
+.acct-logo{
+  width:26px;height:26px;border-radius:6px;background:#fff;border:1px solid var(--border);
+  display:grid;place-items:center;font-weight:700;font-size:11px;flex:none;
+}
+.acct-id b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+.acct-actions{display:flex;gap:5px}
+.acct-actions button{padding:4px 9px;font-size:12px}
+.acct-body{padding:14px;border-top:1px solid var(--border);display:none}
+.acct-body.open{display:block}
+
+/* ============ 模态框（替换 prompt()） ============ */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,0.4);backdrop-filter:blur(2px);
+  display:none;align-items:center;justify-content:center;z-index:100;
+}
+.modal-backdrop.open{display:flex}
+.modal{
+  background:#fff;border-radius:14px;padding:24px;width:440px;max-width:calc(100vw - 32px);
+  box-shadow:0 10px 40px rgba(0,0,0,0.2);
+}
+.modal h3{margin:0 0 16px;font-size:17px;font-weight:600}
+.modal .actions{
+  display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;
+  border-top:1px solid #eee;
+}
+
+/* ============ Toast ============ */
+.toast{
+  position:fixed;right:20px;bottom:20px;background:var(--ink);color:#fff;
+  padding:11px 16px;border-radius:8px;font-size:13px;z-index:200;
+  box-shadow:0 4px 16px rgba(0,0,0,0.2);
+  opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.bad{background:var(--bad)}
+
+/* ============ 信息条 ============ */
+.info-line{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0}
+.info-line .k{color:var(--ink-2)}
+.info-line .v{font-weight:500;font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+
+@media(max-width:760px){
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .row.two,.row.three{grid-template-columns:1fr}
+  .vol-row{grid-template-columns:1fr 50px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">RLCD <i>/</i> Control <span style="font-size:11px;color:var(--ink-3);font-weight:400;margin-left:8px">· mockup v1</span></div>
+    <div class="meta">192.168.40.116<br>18:42 · 在线</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview">概览</div>
+  <div class="tab" data-tab="accounts">AI 账号</div>
+  <div class="tab" data-tab="integ">集成</div>
+  <div class="tab" data-tab="system">系统</div>
+</div>
+
+<main>
+
+<!-- =========================== TAB 1: 概览 =========================== -->
+<section class="tab-pane active" data-pane="overview">
+
+  <div class="card">
+    <h2>设备控制</h2>
+    <div class="stat-grid">
+      <div class="stat"><small>运行时间</small><b>3天 2小时</b></div>
+      <div class="stat"><small>可用内存</small><b>18.7 KiB</b></div>
+      <div class="stat"><small>最低内存</small><b>3.5 KiB</b></div>
+      <div class="stat"><small>网络地址</small><b>192.168.40.116</b></div>
+    </div>
+
+    <div class="field" style="margin-bottom:14px">
+      <label>扬声器音量</label>
+      <div class="vol-row">
+        <input type="range" min="0" max="100" value="60" oninput="this.nextElementSibling.textContent=this.value+'%'">
+        <b>60%</b>
+        <button onclick="demoBtn(this)">应用</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>显示页面 · 立即切换</label>
+      <div class="btn-row">
+        <button onclick="demoBtn(this,'综合')">综合</button>
+        <button onclick="demoBtn(this,'日历')">日历</button>
+        <button onclick="demoBtn(this,'天气')">天气</button>
+        <button onclick="demoBtn(this,'AI')">AI</button>
+        <button onclick="demoBtn(this,'已切到下一页')">下一页</button>
+      </div>
+      <p class="hint">与 USER 按钮单击等效，点击后设备屏幕立即切换。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>页面编排 <span style="float:right;font-weight:400;text-transform:none;letter-spacing:0"><span class="badge ok">已保存</span></span></h2>
+    <div class="list-row page-row"><input type="checkbox" checked><span class="name">综合</span>
+      <div class="btn-row"><button>↑</button><button>↓</button></div></div>
+    <div class="list-row page-row"><input type="checkbox" checked><span class="name">日历</span>
+      <div class="btn-row"><button>↑</button><button>↓</button></div></div>
+    <div class="list-row page-row"><input type="checkbox" checked><span class="name">天气</span>
+      <div class="btn-row"><button>↑</button><button>↓</button></div></div>
+    <div class="list-row page-row"><input type="checkbox"><span class="name">AI</span>
+      <div class="btn-row"><button>↑</button><button>↓</button></div></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="primary" onclick="demoBtn(this,'页面顺序已保存')">保存页面顺序</button>
+      <button>AI 自动刷新: <b style="font-variant-numeric:tabular-nums">5</b> 分钟</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>刷新状态</h2>
+    <div class="info-line"><span class="k">上次全部成功</span><span class="v">2026-08-12 18:38:42</span></div>
+    <div class="info-line"><span class="k">下次刷新</span><span class="v">约 2 分钟后</span></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button onclick="demoBtn(this,'刷新请求已排队')">立即刷新</button>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== TAB 2: AI 账号 =========================== -->
+<section class="tab-pane" data-pane="accounts">
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="margin:0">账号管理 <span class="badge">3 / 32</span></h2>
+      <div class="btn-row">
+        <button>放弃修改</button>
+        <button>＋ 添加账号</button>
+      </div>
+    </div>
+
+    <div class="acct">
+      <div class="acct-head">
+        <div class="acct-id"><span class="acct-logo">C</span><b>Codex 主账号</b><span class="badge ok">正常</span></div>
+        <div></div>
+        <div class="acct-actions"><button>管理</button><button>停用</button><button>↑</button><button>↓</button><button class="danger">删除</button></div>
+      </div>
+    </div>
+
+    <div class="acct">
+      <div class="acct-head">
+        <div class="acct-id"><span class="acct-logo">K</span><b>Kimi 编程</b><span class="badge stale">旧数据</span></div>
+        <div></div>
+        <div class="acct-actions"><button>管理</button><button>停用</button><button>↑</button><button>↓</button><button class="danger">删除</button></div>
+      </div>
+    </div>
+
+    <div class="acct disabled">
+      <div class="acct-head">
+        <div class="acct-id"><span class="acct-logo">D</span><b>DeepSeek 备用</b><span class="badge pending">已停用</span></div>
+        <div></div>
+        <div class="acct-actions"><button>管理</button><button>启用</button><button>↑</button><button>↓</button><button class="danger">删除</button></div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-top:14px">
+      <button class="primary" onclick="demoBtn(this,'账号已保存，准备刷新')">保存全部更改</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>代理连通性诊断</h2>
+    <p class="hint" style="margin-top:0;margin-bottom:14px">使用已保存的第一项启用代理，按真实额度查询路径检查 TCP、HTTP CONNECT 和 TLS；诊断不会回显代理凭据。</p>
+    <button onclick="demoBtn(this,'代理诊断已完成')">检查代理连通性</button>
+    <pre class="mono" style="margin-top:14px;background:#fafafa;padding:10px;border-radius:6px;color:var(--ink-2)">尚未检查</pre>
+  </div>
+</section>
+
+<!-- =========================== TAB 3: 集成 =========================== -->
+<section class="tab-pane" data-pane="integ">
+
+  <div class="card">
+    <h2>城市天气</h2>
+    <p class="hint" style="margin-top:0;margin-bottom:14px">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。</p>
+    <div class="row two">
+      <div class="field"><label>省份</label><select><option>江苏省</option></select></div>
+      <div class="field"><label>城市</label><select><option>苏州市</option></select></div>
+    </div>
+    <div class="row two" style="margin-top:12px">
+      <div class="field"><label>高德城市 adcode（必填）</label><input value="320500"></div>
+      <div class="field"><label>天气自动刷新（分钟）</label><input type="number" value="15"></div>
+    </div>
+    <div class="field" style="margin-top:12px"><label>高德 Web 服务 Key</label><input type="password" placeholder="留空保留已保存 Key"></div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="primary" onclick="demoBtn(this,'天气配置已保存')">保存并立即检测</button>
+      <button>查看天气诊断</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>日历与节假日</h2>
+    <div class="field"><label>年度 JSON 数据源</label><input value="https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/{year}.json"></div>
+    <p class="hint">已缓存 2026 年数据</p>
+    <div class="btn-row" style="margin-top:14px">
+      <button onclick="demoBtn(this,'数据源已保存')">保存数据源</button>
+      <button class="primary" onclick="demoBtn(this,'节假日同步完成')">立即同步</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="margin:0">待办事项 <span class="badge">2 项</span></h2>
+      <button onclick="openModal()">＋ 新增待办</button>
+    </div>
+    <div class="list-row todo-row">
+      <input type="checkbox">
+      <span class="due">08-15 09:00</span>
+      <span class="content">给花浇水</span>
+      <div class="actions"><button onclick="openModal()">编辑</button><button class="danger">删除</button></div>
+    </div>
+    <div class="list-row todo-row">
+      <input type="checkbox">
+      <span class="due">08-20</span>
+      <span class="content">提交月度报告</span>
+      <div class="actions"><button onclick="openModal()">编辑</button><button class="danger">删除</button></div>
+    </div>
+    <p class="hint" style="margin-top:10px">新增/编辑走统一模态框，替换浏览器原生 prompt() 弹窗。</p>
+  </div>
+</section>
+
+<!-- =========================== TAB 4: 系统 =========================== -->
+<section class="tab-pane" data-pane="system">
+
+  <div class="card">
+    <h2>待办 API Token</h2>
+    <p class="hint" style="margin-top:0;margin-bottom:10px">局域网客户端使用 <code class="mono">Authorization: Bearer &lt;token&gt;</code>，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p>
+    <div class="mono" style="background:#1d1d1f;color:#d5f5e3;padding:10px;border-radius:6px;word-break:break-all">a4cb8fd0e72b9f3c1a8d4e6f2b1c9a7e8d5f3c2b1a6e9d7f4c8b5a2e3f1d6c9</div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="danger" onclick="demoBtn(this,'Token 已重新生成')">重新生成 Token</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>关于</h2>
+    <div class="info-line"><span class="k">固件版本</span><span class="v mono">2.2.2</span></div>
+    <div class="info-line"><span class="k">运行分区</span><span class="v mono">ota_0</span></div>
+    <div class="info-line"><span class="k">App 分区余量</span><span class="v">6%</span></div>
+    <div class="info-line"><span class="k">最近启动</span><span class="v">3 天前</span></div>
+  </div>
+</section>
+
+</main>
+
+<!-- =========================== 待办模态框（替换 prompt()） =========================== -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">新增待办</h3>
+    <div class="field" style="margin-bottom:14px">
+      <label>内容</label>
+      <input id="todoContent" placeholder="例如：给花浇水">
+    </div>
+    <div class="row two">
+      <div class="field"><label>日期（可选）</label><input id="todoDate" placeholder="YYYY-MM-DD"></div>
+      <div class="field"><label>时间（可选）</label><input id="todoTime" placeholder="HH:MM"></div>
+    </div>
+    <div class="actions">
+      <button onclick="closeModal()">取消</button>
+      <button class="primary" onclick="saveTodo(this)">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Tab 切换
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelector(`[data-pane="${t.dataset.tab}"]`).classList.add('active');
+  };
+});
+
+// 演示按钮 loading → success 反馈
+function demoBtn(btn, msg){
+  const original = btn.textContent;
+  btn.classList.add('loading');
+  btn.innerHTML = '<span class="spinner"></span>';
+  setTimeout(()=>{
+    btn.classList.remove('loading');
+    btn.classList.add('success');
+    btn.innerHTML = '✓';
+    if(msg) toast(msg);
+    setTimeout(()=>{
+      btn.classList.remove('success');
+      btn.textContent = original;
+    }, 1200);
+  }, 700);
+}
+
+// 模态框
+function openModal(){
+  document.getElementById('modal').classList.add('open');
+  setTimeout(()=>document.getElementById('todoContent').focus(),50);
+}
+function closeModal(){
+  document.getElementById('modal').classList.remove('open');
+}
+function saveTodo(btn){
+  demoBtn(btn,'待办已保存');
+  setTimeout(closeModal, 700);
+}
+
+// Toast
+function toast(s, bad){
+  const t=document.getElementById('toast');
+  t.textContent=s;
+  t.classList.toggle('bad',!!bad);
+  t.classList.add('show');
+  clearTimeout(window._tt);
+  window._tt=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+// 点击 backdrop 关闭模态框
+document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+</script>
+
+</body>
+</html>
