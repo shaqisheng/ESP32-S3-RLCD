@@ -16,7 +16,8 @@ private:
     std::mutex session_mutex_;
     std::string session_id_;
     std::string csrf_token_;
-    int64_t session_seen_us_ = 0;
+    int64_t session_seen_sec_ = 0;          // 上次活动墙上时钟（epoch 秒）
+    int64_t session_last_persisted_us_ = 0; // 上次写 NVS 的 boot 微秒，限频用
 
     AdminServer() = default;
     bool HasPassword() const;
@@ -26,6 +27,9 @@ private:
     bool IsApiAuthorized(httpd_req_t* req, bool csrf);
     std::string GetApiToken(bool regenerate = false);
     void CreateSession(std::string& sid, std::string& csrf);
+    bool LoadSession();          // 启动时从 NVS 还原会话（跨烧录保留）
+    void SaveSession();          // 把当前会话写入 NVS（调用方需持锁）
+    void ClearPersistedSession();  // 清掉 NVS 里的会话
 
     static esp_err_t PageHandler(httpd_req_t* req);
     static esp_err_t SetupHandler(httpd_req_t* req);

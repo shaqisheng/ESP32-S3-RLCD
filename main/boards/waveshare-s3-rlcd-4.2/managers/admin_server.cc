@@ -32,7 +32,9 @@ constexpr const char* TAG = "AdminServer";
 constexpr const char* kPartition = "quota_nvs";
 constexpr const char* kNamespace = "admin";
 constexpr size_t kMaxRequest = 48 * 1024;
-constexpr int64_t kSessionTimeoutUs = 30LL * 60 * 1000000;
+constexpr int64_t kSessionTimeoutSec = 60 * 60;            // 1 小时不操作过期
+constexpr int64_t kSessionPersistIntervalUs = 5 * 60 * 1000000LL;  // 每 5 分钟写一次 NVS
+constexpr int64_t kMinValidEpochSec = 1700000000;          // 2023-11，用于墙上时钟有效性自检
 
 void ScheduleTodoDisplayRefresh() {
     Application::GetInstance().Schedule([]() {
@@ -351,13 +353,61 @@ bool AdminServer::CheckPassword(const std::string& password) const {
     return diff == 0;
 }
 
+bool AdminServer::LoadSession() {
+    nvs_handle_t handle;
+    if (nvs_open_from_partition(kPartition, kNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
+    char sid[64] = {}, csrf[64] = {};
+    size_t sid_len = sizeof(sid), csrf_len = sizeof(csrf);
+    int64_t seen_sec = 0;
+    bool ok = nvs_get_str(handle, "sid", sid, &sid_len) == ESP_OK &&
+              nvs_get_str(handle, "csrf", csrf, &csrf_len) == ESP_OK &&
+              nvs_get_i64(handle, "seen", &seen_sec) == ESP_OK;
+    nvs_close(handle);
+    if (!ok) return false;
+    const int64_t now = time(nullptr);
+    if (now < kMinValidEpochSec || seen_sec < kMinValidEpochSec) return false;  // 时钟异常
+    if (now - seen_sec > kSessionTimeoutSec) {
+        ClearPersistedSession();  // 已过期，清掉
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(session_mutex_);
+    session_id_ = sid;
+    csrf_token_ = csrf;
+    session_seen_sec_ = seen_sec;
+    session_last_persisted_us_ = esp_timer_get_time();
+    return true;
+}
+
+void AdminServer::SaveSession() {
+    if (session_id_.empty()) return;
+    nvs_handle_t handle;
+    if (nvs_open_from_partition(kPartition, kNamespace, NVS_READWRITE, &handle) != ESP_OK) return;
+    nvs_set_str(handle, "sid", session_id_.c_str());
+    nvs_set_str(handle, "csrf", csrf_token_.c_str());
+    nvs_set_i64(handle, "seen", session_seen_sec_);
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+void AdminServer::ClearPersistedSession() {
+    nvs_handle_t handle;
+    if (nvs_open_from_partition(kPartition, kNamespace, NVS_READWRITE, &handle) != ESP_OK) return;
+    nvs_erase_key(handle, "sid");
+    nvs_erase_key(handle, "csrf");
+    nvs_erase_key(handle, "seen");
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
 void AdminServer::CreateSession(std::string& sid, std::string& csrf) {
     std::lock_guard<std::mutex> lock(session_mutex_);
     session_id_ = HexRandom(16);
     csrf_token_ = HexRandom(16);
-    session_seen_us_ = esp_timer_get_time();
+    session_seen_sec_ = time(nullptr);
+    session_last_persisted_us_ = esp_timer_get_time();
     sid = session_id_;
     csrf = csrf_token_;
+    SaveSession();  // 立即落 NVS，跨烧录可恢复
 }
 
 bool AdminServer::IsAuthorized(httpd_req_t* req, bool csrf) {
@@ -366,8 +416,9 @@ bool AdminServer::IsAuthorized(httpd_req_t* req, bool csrf) {
     const std::string sid = CookieValue(cookie, "sid");
     if (sid.empty()) return false;
     std::lock_guard<std::mutex> lock(session_mutex_);
-    const int64_t now = esp_timer_get_time();
-    if (session_id_.empty() || sid != session_id_ || now - session_seen_us_ > kSessionTimeoutUs) {
+    const int64_t now = time(nullptr);
+    if (now < kMinValidEpochSec) return false;  // 时钟未就绪（RTC/NTP 异常）
+    if (session_id_.empty() || sid != session_id_ || now - session_seen_sec_ > kSessionTimeoutSec) {
         session_id_.clear();
         return false;
     }
@@ -376,7 +427,13 @@ bool AdminServer::IsAuthorized(httpd_req_t* req, bool csrf) {
         if (httpd_req_get_hdr_value_str(req, "X-CSRF-Token", token, sizeof(token)) != ESP_OK ||
             token != csrf_token_) return false;
     }
-    session_seen_us_ = now;
+    session_seen_sec_ = now;
+    // 限频写 NVS，避免每次轮询都磨损 flash
+    const int64_t now_us = esp_timer_get_time();
+    if (now_us - session_last_persisted_us_ > kSessionPersistIntervalUs) {
+        SaveSession();
+        session_last_persisted_us_ = now_us;
+    }
     return true;
 }
 
@@ -435,6 +492,9 @@ bool AdminServer::Start() {
         {"/api/display/switch", HTTP_POST, DisplaySwitchHandler, this},
     };
     for (const auto& route : routes) httpd_register_uri_handler(server_, &route);
+    if (LoadSession()) {
+        ESP_LOGI(TAG, "已从 NVS 恢复上次会话（无需重新登录）");
+    }
     ESP_LOGI(TAG, "局域网后台已启动: http://<device-ip>:8080/admin");
     return true;
 }
@@ -455,7 +515,7 @@ esp_err_t AdminServer::SetupHandler(httpd_req_t* req) {
     if (!self->SetPassword(password)) return Error(req, 400, "保存密码失败");
     std::string sid, csrf;
     self->CreateSession(sid, csrf);
-    const std::string cookie = "sid=" + sid + "; Path=/; HttpOnly; SameSite=Strict";
+    const std::string cookie = "sid=" + sid + "; Path=/; Max-Age=86400; HttpOnly; SameSite=Strict";
     httpd_resp_set_hdr(req, "Set-Cookie", cookie.c_str());
     return Json(req, "{\"csrf\":\"" + csrf + "\"}");
 }
@@ -470,7 +530,7 @@ esp_err_t AdminServer::LoginHandler(httpd_req_t* req) {
     }
     std::string sid, csrf;
     self->CreateSession(sid, csrf);
-    const std::string cookie = "sid=" + sid + "; Path=/; HttpOnly; SameSite=Strict";
+    const std::string cookie = "sid=" + sid + "; Path=/; Max-Age=86400; HttpOnly; SameSite=Strict";
     httpd_resp_set_hdr(req, "Set-Cookie", cookie.c_str());
     return Json(req, "{\"csrf\":\"" + csrf + "\"}");
 }
@@ -481,6 +541,7 @@ esp_err_t AdminServer::LogoutHandler(httpd_req_t* req) {
     {
         std::lock_guard<std::mutex> lock(self->session_mutex_);
         self->session_id_.clear();
+        self->ClearPersistedSession();
     }
     httpd_resp_set_hdr(req, "Set-Cookie", "sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
     return Json(req, "{\"ok\":true}");
