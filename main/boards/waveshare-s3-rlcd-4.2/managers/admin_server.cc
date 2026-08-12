@@ -27,6 +27,7 @@
 #include "application.h"
 #include "audio_codec.h"
 #include "board.h"
+#include "display/lvgl_display/lvgl_display.h"
 #include "../custom_lcd_display.h"
 
 namespace {
@@ -117,6 +118,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
+<section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
 <section class="panel"><h2>待办 API</h2><p class="hint">局域网客户端使用 Authorization: Bearer &lt;token&gt;，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p><div id="apiToken" class="api-token">读取中…</div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="regenToken()">重新生成 Token</button></div></section>
 </div>
 </section></main></div>
@@ -188,6 +190,7 @@ async function loadDevice(){var d=await api("/api/device");el("deviceUptime").te
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
 async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
+async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();var url=URL.createObjectURL(blob);el("screenshotImg").src=url;el("screenshotLink").href=url;el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
 function renderDisplaySwitches(){var sorted=pages.slice().sort(function(a,b){return a.order-b.order});var h="";sorted.forEach(function(p){if(p.enabled)h+='<button onclick="switchPage(\''+p.id+'\')">'+(names[p.id]||p.id)+'</button>'});h+='<button onclick="switchPage(\'toggle\')">下一页</button>';el("displaySwitches").innerHTML=h}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
 function renderTodos(){renderTodoSummary();var list=todos.filter(function(t){if(todoFilter==='active')return!t.completed;if(todoFilter==='completed')return t.completed;return true});if(!list.length){el("todos").innerHTML='<div class="empty">'+(todoFilter==='active'?'无未完成':todoFilter==='completed'?'无已完成':'暂无待办')+'</div>';return}el("todos").innerHTML=list.map(function(t){return '<div class="todo-row"><input type="checkbox" '+(t.completed?'checked':'')+' onchange="toggleTodo(\''+t.id+'\',this.checked)"><span>'+esc((t.due_date||'').slice(5)+(t.due_time?' '+t.due_time:''))+'</span><b>'+esc(t.content)+'</b><span><button onclick="editTodo(\''+t.id+'\')">编辑</button> <button class="danger" onclick="deleteTodo(\''+t.id+'\')">删除</button></span></div>'}).join('')}
@@ -500,6 +503,7 @@ bool AdminServer::Start() {
         {"/api/api-token", HTTP_GET, ApiTokenHandler, this}, {"/api/api-token", HTTP_POST, ApiTokenHandler, this},
         {"/api/device", HTTP_GET, DeviceHandler, this}, {"/api/device", HTTP_PUT, DeviceHandler, this},
         {"/api/display/switch", HTTP_POST, DisplaySwitchHandler, this},
+        {"/api/display/screenshot", HTTP_GET, ScreenshotHandler, this},
     };
     for (const auto& route : routes) httpd_register_uri_handler(server_, &route);
     if (LoadSession()) {
@@ -811,4 +815,20 @@ esp_err_t AdminServer::DisplaySwitchHandler(httpd_req_t* req) {
     }
     ScheduleDisplaySwitch(mode);
     return Json(req, "{\"ok\":true,\"mode\":\"" + mode + "\"}");
+}
+
+esp_err_t AdminServer::ScreenshotHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, false)) return Error(req, 401, "未登录");
+    auto* display = Board::GetInstance().GetDisplay();
+    auto* lvgl_display = static_cast<LvglDisplay*>(display);
+    if (!lvgl_display) return Error(req, 500, "显示器未初始化");
+    std::string png;
+    if (!lvgl_display->SnapshotToPng1bit(png)) {
+        return Error(req, 500, "截图失败");
+    }
+    httpd_resp_set_type(req, "image/png");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"screenshot.png\"");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, png.data(), png.size());
 }

@@ -55,4 +55,5 @@ private:
     static esp_err_t ApiTokenHandler(httpd_req_t* req);
     static esp_err_t DeviceHandler(httpd_req_t* req);
     static esp_err_t DisplaySwitchHandler(httpd_req_t* req);
+    static esp_err_t ScreenshotHandler(httpd_req_t* req);
 };

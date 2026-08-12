@@ -24,6 +24,9 @@ public:
     virtual void UpdateStatusBar(bool update_all = false);
     virtual void SetPowerSaveMode(bool on);
     virtual bool SnapshotToJpeg(std::string& jpeg_data, int quality = 80);
+    // 1-bit 黑白 PNG 截图（适合单色 RLCD/OLED 屏）
+    // 采样亮度 > 阈值视为白，打包成 8 像素/字节。输出 ~2-5KB。
+    virtual bool SnapshotToPng1bit(std::string& png_data, uint8_t threshold = 128);
 
 protected:
     esp_pm_lock_handle_t pm_lock_ = nullptr;
