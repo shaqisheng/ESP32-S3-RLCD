@@ -356,7 +356,14 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
         if (primary_remaining >= 0) {
             snprintf(text, sizeof(text), "%d%%", primary_remaining);
             lv_label_set_text(quota_bars_[slot][1], text);
-            snprintf(text, sizeof(text), "%s 剩余", primary.label.c_str());
+            // 5H 时追加倒计时（如 "5H 剩余 2h30m"），让用户感知窗口何时刷新
+            if (primary.label == "5H" && primary.reset_at > 0) {
+                char countdown[32];
+                FormatResetCountdown(primary.reset_at, countdown, sizeof(countdown));
+                snprintf(text, sizeof(text), "%s 剩余 %s", primary.label.c_str(), countdown);
+            } else {
+                snprintf(text, sizeof(text), "%s 剩余", primary.label.c_str());
+            }
             lv_label_set_text(quota_tier_labels_[slot][0], text);
         } else {
             snprintf(text, sizeof(text), "%.0f", primary.remaining);
