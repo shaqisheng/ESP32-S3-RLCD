@@ -448,11 +448,20 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn("height == 118 ? QUOTA_COMPACT_VALUE_Y", source)
         self.assertIn("height == 118 ? QUOTA_COMPACT_PRIMARY_Y", source)
 
-    def test_glm_and_deepseek_logos_are_inverted_for_the_quota_page(self):
-        for asset in ("ui_img_quota_glm.c", "ui_img_quota_deepseek.c"):
+    def test_all_four_quota_logos_share_white_background(self):
+        """4 个 provider logo（Codex/Kimi/GLM/DeepSeek）必须统一白底（0xff），
+        不允许 GLM/DeepSeek 再被 inverted。回归：曾因 inverted 导致 4 个 logo
+        背景色不统一（黑白混搭），用户要求改回原版。"""
+        for asset in ("ui_img_quota_codex.c", "ui_img_quota_kimi.c",
+                      "ui_img_quota_glm.c", "ui_img_quota_deepseek.c"):
             source = (BOARD / "assets/icons" / asset).read_text()
-            self.assertIn("INVERTED_FOR_QUOTA_PAGE", source)
-            self.assertIn("0x00, 0x00, 0x00, 0x00", source)
+            # 头部不允许出现 INVERTED_FOR_QUOTA_PAGE 标记
+            self.assertNotIn("INVERTED_FOR_QUOTA_PAGE", source,
+                             f"{asset} 仍是 inverted，应改回原版白底")
+            # 统一注释格式
+            self.assertIn("Official provider mark", source)
+            # 数据首字节必须是 0xff（白底）—— 原始字节数组第一行第一字节
+            self.assertRegex(source, r"_map\[\]\s*=\s*\{\s*\n\s*0xff,")
 
     def test_quota_refresh_interval_is_configurable_and_defaults_to_five_minutes(self):
         quota = (BOARD / "managers/quota_manager.cc").read_text()

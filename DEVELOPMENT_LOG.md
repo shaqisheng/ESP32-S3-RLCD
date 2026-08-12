@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-08-12 — 统一 4 个 AI logo 为白底（GLM/DeepSeek 改回原版）
+
+- **修改内容**：
+  - `assets/icons/ui_img_quota_glm.c`：反相字节数组（每个字节 0x00↔0xff），去掉头部 `INVERTED_FOR_QUOTA_PAGE:` 注释前缀，改为 `Official provider mark`
+  - `assets/icons/ui_img_quota_deepseek.c`：同上
+  - `tests/host/rlcd_ui_source_contract_test.py`：原 `test_glm_and_deepseek_logos_are_inverted_for_the_quota_page` 改写为 `test_all_four_quota_logos_share_white_background`，断言 4 个 logo 都不是 inverted + 都是白底（首字节 0xff）+ 头部统一注释格式
+- **修改原因**：用户反馈 AI 页面 4 个 logo 背景色不统一。原状态：Codex/Kimi 白底黑字、GLM/DeepSeek 黑底白字（inverted）。用户两个要求（"统一四个背景色为白色"+"glm和ds的logo改回原版"）其实是同一件事——把 GLM 和 DeepSeek 反相回白底黑字，与 Codex/Kimi 一致。ProviderLogo() 是纯查表，无代码层变换，所以直接改 .c 文件即可。
+- **影响范围**：只动 2 个静态资源文件 + 1 个测试；不影响任何 C++ 逻辑、API、NVS。Codex/Kimi 不变。
+- **测试结果**：
+  - Python 契约测试: ✅ 44 个全过（含改写的 logo 白底断言）
+  - `git diff --check`: ✅
+  - idf.py build: ✅（增量，只重编 2 个 .c 资源）
+  - 真机烧录 + 串口 45s: ✅（0 异常；minimal sram 20963 健康）
+  - 设备屏幕实际显示 4 个 logo 统一白底: ⏳ 由用户在 AI 页面实测
+- **回滚方式**：`git revert`；或对 GLM/DeepSeek 再次反相字节数组（XOR 0xff 是自反操作）
+- **关联文档**：无文档影响（资源文件级修改）
+
+---
+
 ## 2026-08-12 — 修复 Kimi/GLM 配额重置时间显示不准
 
 - **修改内容**：
