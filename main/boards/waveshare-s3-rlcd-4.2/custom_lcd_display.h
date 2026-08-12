@@ -36,7 +36,6 @@ private:
         MODE_CALENDAR = 1,
         MODE_FORECAST = 2,
         MODE_QUOTA = 3,
-        MODE_TODO = 4,
     };
     DisplayMode display_mode_ = MODE_OVERVIEW;
 
@@ -48,10 +47,6 @@ private:
     lv_obj_t *music_page_ = nullptr;
     lv_obj_t *pomodoro_page_ = nullptr;
     lv_obj_t *quota_page_ = nullptr;
-    lv_obj_t *todo_page_ = nullptr;
-    lv_obj_t *todo_header_label_ = nullptr;
-    std::array<lv_obj_t*, 5> todo_row_labels_{};
-    lv_obj_t *todo_overflow_label_ = nullptr;
 
     // ===== 天气站 UI 组件 =====
     // 状态栏（右上角浮动胶囊）
@@ -175,7 +170,6 @@ private:
     void SetupMusicUI();
     void SetupPomodoroUI();
     void SetupQuotaUI();
-    void SetupTodoUI();
     void ApplyDisplayMode();
     void RenderQuotaPageInternal();
     void UpdateCalendarInternal(const struct tm& timeinfo);
@@ -234,13 +228,10 @@ public:
     bool IsQuotaMode() const { return display_mode_ == MODE_QUOTA; }
     bool IsCalendarMode() const { return display_mode_ == MODE_CALENDAR; }
     bool IsForecastMode() const { return display_mode_ == MODE_FORECAST; }
-    bool IsTodoMode() const { return display_mode_ == MODE_TODO; }
     void SwitchToCalendarPage();
     void SwitchToForecastPage();
     void SwitchToPomodoroPage();
     void SwitchToQuotaPage();
-    void SwitchToTodoPage();
-    void UpdateTodoPageInternal();
     void TickQuotaPage();
 
     // 番茄钟 UI 更新方法

@@ -62,8 +62,6 @@ void ScheduleDisplaySwitch(const std::string& mode) {
             display->SwitchToForecastPage();
         } else if (mode == "quota") {
             display->SwitchToQuotaPage();
-        } else if (mode == "todo") {
-            display->SwitchToTodoPage();
         }
     });
 }
@@ -806,7 +804,7 @@ esp_err_t AdminServer::DisplaySwitchHandler(httpd_req_t* req) {
     if (root) cJSON_Delete(root);
     // 白名单校验，与 ScheduleDisplaySwitch 的分支一致
     if (mode != "toggle" && mode != "overview" && mode != "weather" && mode != "calendar" &&
-        mode != "forecast" && mode != "quota" && mode != "todo") {
+        mode != "forecast" && mode != "quota") {
         return Error(req, 400, "无效的页面标识");
     }
     ScheduleDisplaySwitch(mode);
