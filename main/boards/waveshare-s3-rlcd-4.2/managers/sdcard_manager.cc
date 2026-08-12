@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <cstring>
 #include <algorithm>
+#include <ff.h>
 
 bool SdcardManager::init(int clk, int cmd, int d0) {
     if (mounted_) {
@@ -115,4 +116,18 @@ std::vector<std::string> SdcardManager::listFiles(const char* dir_path, const ch
 
     ESP_LOGI(TAG, "目录 %s 下找到 %d 个文件", dir_path, (int)files.size());
     return files;
+}
+
+bool SdcardManager::getStats(uint64_t& total_bytes, uint64_t& free_bytes) {
+    if (!mounted_) return false;
+    DWORD free_clusters = 0;
+    FATFS* fs = nullptr;
+    // f_getfree 路径必须是挂载点（FatFS 卷标），用 "0:" 或挂载点路径。
+    if (f_getfree(mount_point_, &free_clusters, &fs) != FR_OK || !fs) return false;
+    const uint64_t sector_size = 512;  // SD 卡标准扇区
+    const uint64_t total_clusters = fs->n_fatent - 2;
+    const uint64_t bytes_per_cluster = fs->csize * sector_size;
+    total_bytes = total_clusters * bytes_per_cluster;
+    free_bytes = static_cast<uint64_t>(free_clusters) * bytes_per_cluster;
+    return true;
 }

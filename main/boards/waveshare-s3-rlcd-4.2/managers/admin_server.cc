@@ -16,6 +16,8 @@
 #include <nvs.h>
 
 #include "quota_manager.h"
+#include "sdcard_manager.h"
+#include "sensor_manager.h"
 #include "system_info.h"
 #include "todo_manager.h"
 #include "weather_manager.h"
@@ -95,7 +97,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section id="dashboard" class="hidden">
 <div class="tabs"><div class="tab active" data-tab="overview" onclick="switchTab('overview')">概览</div><div class="tab" data-tab="accounts" onclick="switchTab('accounts')">AI 账号</div><div class="tab" data-tab="integ" onclick="switchTab('integ')">集成</div><div class="tab" data-tab="system" onclick="switchTab('system')">系统</div></div>
 <div class="tab-pane active" data-pane="overview">
-<section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用 SRAM</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低 SRAM</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>可用 PSRAM</small><b id="devicePsram">--</b></div><div class="device-stat"><small>WiFi 信号</small><b id="deviceRssi">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div><div class="device-stat"><small>固件版本</small><b id="deviceFw">--</b></div><div class="device-stat"><small>运行分区</small><b id="devicePartition">--</b></div></div><p class="hint" id="deviceMeta" style="margin:0 0 14px">芯片 -- · Flash -- · MAC --</p><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面 · 立即切换</label><div class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"><button onclick="switchPage('overview')">综合</button><button onclick="switchPage('calendar')">日历</button><button onclick="switchPage('forecast')">天气</button><button onclick="switchPage('quota')">AI</button><button onclick="switchPage('toggle')">下一页</button></div><p class="hint">立即切换设备屏幕到对应页面，与 USER 按钮单击等效</p></section>
+<section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用 SRAM</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低 SRAM</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>可用 PSRAM</small><b id="devicePsram">--</b></div><div class="device-stat"><small>WiFi 信号</small><b id="deviceRssi">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div><div class="device-stat"><small>电池</small><b id="deviceBattery">--</b></div><div class="device-stat"><small>SD 卡</small><b id="deviceSd">--</b></div><div class="device-stat"><small>温度</small><b id="deviceTemp">--</b></div><div class="device-stat"><small>湿度</small><b id="deviceHumi">--</b></div><div class="device-stat"><small>固件版本</small><b id="deviceFw">--</b></div><div class="device-stat"><small>运行分区</small><b id="devicePartition">--</b></div></div><p class="hint" id="deviceMeta" style="margin:0 0 14px">芯片 -- · Flash -- · CPU -- · 蓝牙 -- · MAC --</p><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面 · 立即切换</label><div class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"><button onclick="switchPage('overview')">综合</button><button onclick="switchPage('calendar')">日历</button><button onclick="switchPage('forecast')">天气</button><button onclick="switchPage('quota')">AI</button><button onclick="switchPage('toggle')">下一页</button></div><p class="hint">立即切换设备屏幕到对应页面，与 USER 按钮单击等效</p></section>
 <section class="panel"><h2>页面编排</h2><div id="pages"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="primary" id="savePages">保存页面顺序</button></div></section>
 <section class="panel"><h2>运行状态</h2><div id="runStatus" class="status">读取状态…</div></section>
 </div>
@@ -175,9 +177,10 @@ async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages"
 async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("amap_adcode").value=w.amap_adcode||"";el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice()}
 function memStatus(bytes,isInternal){var b=Number(bytes||0);var label,danger=false;if(isInternal){if(b<20*1024){label="危险";danger=true}else if(b<30*1024){label="紧张";danger=true}else{label="正常"}}else{if(b<512*1024){label="危险";danger=true}else if(b<2*1024*1024){label="紧张";danger=true}else{label="充足"}}var num=b>=1024*1024?(b/1024/1024).toFixed(1)+" MB":(b/1024).toFixed(1)+" KB";return{txt:label+" "+num,danger:danger}}
 function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=el(elId);e.textContent=s.txt;e.style.color=s.danger?"var(--bad)":""}
+function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
 function uptimeText(seconds){seconds=Number(seconds||0);var d=Math.floor(seconds/86400),h=Math.floor(seconds%86400/3600),m=Math.floor(seconds%3600/60);return (d?d+"天 ":"")+h+"小时 "+m+"分"}
 function showVolume(value){value=Number(value);el("volumeValue").textContent=value+"%";el("muteBtn").textContent=value===0?"恢复":"静音"}
-async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);setMem("deviceHeap",d.free_heap,true);setMem("deviceMinHeap",d.minimum_free_heap,true);setMem("devicePsram",d.free_psram,false);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · MAC "+(d.mac||"?");var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
+async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);setMem("deviceHeap",d.free_heap,true);setMem("deviceMinHeap",d.minimum_free_heap,true);setMem("devicePsram",d.free_psram,false);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceBattery").textContent=(d.battery_level==null||d.battery_level<0)?"未检测":(d.battery_level+"%"+(d.battery_charging?" 充电":(d.battery_discharging?" 放电":"")));el("deviceTemp").textContent=(d.temperature_c==null)?"--":(Number(d.temperature_c).toFixed(1)+" °C");el("deviceHumi").textContent=(d.humidity_pct==null)?"--":(Number(d.humidity_pct).toFixed(0)+" %");el("deviceSd").textContent=d.sd_mounted?(sizeText(d.sd_free_bytes)+" / "+sizeText(d.sd_total_bytes)):"未挂载";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · CPU "+(d.cpu_freq_mhz||"?")+" MHz · 蓝牙 "+(d.bluetooth_enabled?"已启用":"未启用")+" · MAC "+(d.mac||"?");var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
 async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
@@ -744,6 +747,40 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
     cJSON_AddStringToObject(root, "chip_model", SystemInfo::GetChipModelName().c_str());
     cJSON_AddNumberToObject(root, "flash_size_mb", SystemInfo::GetFlashSize() / 1024 / 1024);
     cJSON_AddStringToObject(root, "mac", SystemInfo::GetMacAddress().c_str());
+    cJSON_AddNumberToObject(root, "cpu_freq_mhz", CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
+    cJSON_AddBoolToObject(root, "bluetooth_enabled",
+#ifdef CONFIG_BT
+                          true
+#else
+                          false
+#endif
+    );
+    // 电池：Board::GetBatteryLevel(level 0-100, charging, discharging)。
+    int battery_level = -1;
+    bool battery_charging = false, battery_discharging = false;
+    if (Board::GetInstance().GetBatteryLevel(battery_level, battery_charging, battery_discharging)) {
+        cJSON_AddNumberToObject(root, "battery_level", battery_level);
+        cJSON_AddBoolToObject(root, "battery_charging", battery_charging);
+        cJSON_AddBoolToObject(root, "battery_discharging", battery_discharging);
+    } else {
+        cJSON_AddNumberToObject(root, "battery_level", -1);
+    }
+    // 温湿度：SHTC3 I2C 读取（~10ms）。
+    auto sensor = SensorManager::getInstance().getTempHumidity();
+    if (sensor.valid) {
+        cJSON_AddNumberToObject(root, "temperature_c", sensor.temperature);
+        cJSON_AddNumberToObject(root, "humidity_pct", sensor.humidity);
+    }
+    // SD 卡：挂载状态 + 容量（statvfs）。
+    auto& sd = SdcardManager::getInstance();
+    cJSON_AddBoolToObject(root, "sd_mounted", sd.isMounted());
+    if (sd.isMounted()) {
+        uint64_t sd_total = 0, sd_free = 0;
+        if (sd.getStats(sd_total, sd_free)) {
+            cJSON_AddNumberToObject(root, "sd_total_bytes", static_cast<double>(sd_total));
+            cJSON_AddNumberToObject(root, "sd_free_bytes", static_cast<double>(sd_free));
+        }
+    }
     char* raw = cJSON_PrintUnformatted(root);
     std::string out = raw ? raw : "{}";
     if (raw) cJSON_free(raw);

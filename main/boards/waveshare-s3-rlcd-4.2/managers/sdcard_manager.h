@@ -29,6 +29,9 @@ public:
     // SD 卡是否已成功挂载
     bool isMounted() const { return mounted_; }
 
+    // 查询 SD 卡总容量和可用空间（仅挂载时有效）。失败返回 false。
+    bool getStats(uint64_t& total_bytes, uint64_t& free_bytes);
+
     // 扫描指定目录下的文件列表（返回完整路径）
     // 例如：listFiles("/sdcard/white-noise", ".mp3") 
     std::vector<std::string> listFiles(const char* dir_path, const char* extension = nullptr);
