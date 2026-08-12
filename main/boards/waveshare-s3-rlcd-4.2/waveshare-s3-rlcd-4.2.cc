@@ -365,13 +365,16 @@ private:
                     display_->SwitchToForecastPage();
                 } else if (mode == "quota") {
                     display_->SwitchToQuotaPage();
+                } else if (mode == "todo") {
+                    display_->SwitchToTodoPage();
                 } else {
-                    return std::string("参数 mode 无效，请使用 toggle/overview/calendar/forecast/quota");
+                    return std::string("参数 mode 无效，请使用 toggle/overview/calendar/forecast/quota/todo");
                 }
 
                 if (display_->IsCalendarMode()) return std::string("已切换到日历页");
                 if (display_->IsForecastMode()) return std::string("已切换到七日天气页");
                 if (display_->IsQuotaMode()) return std::string("已切换到额度页");
+                if (display_->IsTodoMode()) return std::string("已切换到待办页");
                 return std::string("已切换到综合页");
             }
         );
