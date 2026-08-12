@@ -6,6 +6,27 @@
 
 ---
 
+## 2026-08-12 — 统一 4 张 AI 卡片背景为白色（去掉上下排交替）
+
+- **修改内容**：`quota_ui.cc` 的 `SetupQuotaUI()` for 循环里：
+  - 去掉 `const bool light = row == 0;` 和三元运算（之前上排 light=true 白底、下排 light=false 黑底）
+  - 直接硬编码 `foreground = lv_color_black()` / `background = lv_color_white()`
+  - 同时把 `border_width(card, light ? 0 : 1, 0)` 改为 `border_width(card, 0, 0)`（4 张都无边框）
+  - 加注释说明改动原因
+  - 新增 `test_quota_cards_use_unified_white_background` 契约测试（断言不再有 `row == 0` / `const bool light`，必须硬编码黑白）
+- **修改原因**：用户反馈"AI 卡片的背景没有统一，上下需要统一"。原代码上排（卡片 0/1）白底、下排（卡片 2/3）黑底，2x2 布局看起来黑白混搭。统一为 4 张全白底黑字后视觉一致。
+- **影响范围**：只动 `SetupQuotaUI()` 内的循环开头几行；不影响 render 逻辑、API、NVS、其他页面。quota_page_ 本身仍是黑底，4 张白卡片在黑底页面上自然 contrast，可见性不丢。
+- **测试结果**：
+  - Python 契约测试: ✅ 45 个全过（新增 1 个）
+  - `git diff --check`: ✅
+  - idf.py build: ✅ 增量
+  - 真机烧录 + 串口 30s: ✅ 0 异常
+  - 设备屏幕实际 4 张卡片背景统一: ⏳ 由用户实测
+- **回滚方式**：`git revert`；或恢复 `const bool light = row == 0;` + 三个三元运算
+- **关联文档**：与 [[2026-08-12-统一4个AI-logo为白底]] 配套——logo 资源 + 卡片背景两层都改完，AI 页面整体视觉风格才真正统一
+
+---
+
 ## 2026-08-12 — 统一 4 个 AI logo 为白底（GLM/DeepSeek 改回原版）
 
 - **修改内容**：

@@ -124,9 +124,9 @@ void CustomLcdDisplay::SetupQuotaUI() {
 
     for (size_t i = 0; i < 4; ++i) {
         const int col = i % 2, row = i / 2;
-        const bool light = row == 0;
-        const lv_color_t foreground = light ? lv_color_black() : lv_color_white();
-        const lv_color_t background = light ? lv_color_white() : lv_color_black();
+        // 4 张卡片统一白底黑字（原来上下排交替黑白，导致背景不统一）。
+        const lv_color_t foreground = lv_color_black();
+        const lv_color_t background = lv_color_white();
 
         auto* card = lv_obj_create(quota_page_); quota_cards_[i] = card;
         lv_obj_set_size(card, 191, 118);
@@ -134,7 +134,7 @@ void CustomLcdDisplay::SetupQuotaUI() {
         lv_obj_set_style_bg_color(card, background, 0);
         lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(card, lv_color_white(), 0);
-        lv_obj_set_style_border_width(card, light ? 0 : 1, 0);
+        lv_obj_set_style_border_width(card, 0, 0);
         lv_obj_set_style_radius(card, 0, 0);
         lv_obj_set_style_pad_all(card, 6, 0);
         // 底部的重置时间使用显式坐标，不能再被卡片默认的 6px 内边距裁切。

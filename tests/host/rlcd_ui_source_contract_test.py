@@ -463,6 +463,17 @@ class RlcdUiSourceContractTest(unittest.TestCase):
             # 数据首字节必须是 0xff（白底）—— 原始字节数组第一行第一字节
             self.assertRegex(source, r"_map\[\]\s*=\s*\{\s*\n\s*0xff,")
 
+    def test_quota_cards_use_unified_white_background(self):
+        """4 张 AI 卡片必须统一白底黑字。回归：曾用 `light = row == 0`
+        让上排白底、下排黑底，用户反馈"上下背景不统一"。"""
+        source = (BOARD / "quota_ui.cc").read_text()
+        # 不允许出现 row == 0 的 light 判断
+        self.assertNotIn("row == 0", source)
+        self.assertNotIn("const bool light", source)
+        # 必须硬编码为黑字 / 白底
+        self.assertIn("const lv_color_t foreground = lv_color_black()", source)
+        self.assertIn("const lv_color_t background = lv_color_white()", source)
+
     def test_quota_refresh_interval_is_configurable_and_defaults_to_five_minutes(self):
         quota = (BOARD / "managers/quota_manager.cc").read_text()
         header = (BOARD / "managers/quota_manager.h").read_text()
