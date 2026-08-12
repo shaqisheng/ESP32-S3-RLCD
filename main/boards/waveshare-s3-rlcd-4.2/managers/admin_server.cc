@@ -18,12 +18,14 @@
 #include "quota_manager.h"
 #include "sdcard_manager.h"
 #include "sensor_manager.h"
+#include "ssid_manager.h"
 #include "system_info.h"
 #include "todo_manager.h"
 #include "weather_manager.h"
 #include "calendar_manager.h"
 #include "manager_safety.h"
 #include "wifi_manager.h"
+#include "wifi_station.h"
 #include "application.h"
 #include "audio_codec.h"
 #include "board.h"
@@ -118,12 +120,20 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
-<section class="panel"><h2>Wi-Fi 管理</h2><p class="hint">查看当前 Wi-Fi 连接状态。扫描、切换、AP 热点功能后续提供。</p><div class="manage-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>SSID</label><div id="wifiSsid" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>IP 地址</label><div id="wifiIp" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div><div class="manage-grid" style="grid-template-columns:repeat(4,1fr)"><div class="field"><label>信号强度</label><div id="wifiRssi" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>信道</label><div id="wifiChannel" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>MAC 地址</label><div id="wifiMac" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>状态</label><div id="wifiStatus" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div></section>
+<section class="panel"><h2>Wi-Fi 管理</h2>
+<p class="hint" style="margin:0 0 14px">管理已保存的 Wi-Fi 网络，支持添加/删除/设默认/切换。</p>
+<div class="manage-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>当前连接</label><div id="wifiCurrent" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>IP 地址</label><div id="wifiIp" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div>
+<div class="manage-grid" style="grid-template-columns:repeat(4,1fr)"><div class="field"><label>信号强度</label><div id="wifiRssi" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>信道</label><div id="wifiChannel" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>MAC 地址</label><div id="wifiMac" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>状态</label><div id="wifiStatus" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div>
+<hr style="margin:14px 0;border:0;border-top:1px dashed #aaa">
+<label>已保存的 Wi-Fi</label><div id="wifiSaved" style="margin:8px 0"></div>
+<div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="openWifiModal()">＋ 新增 Wi-Fi</button><button class="danger" onclick="wifiDisconnect()">断开连接</button></div>
+</section>
 <section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
 <section class="panel"><h2>待办 API</h2><p class="hint">局域网客户端使用 Authorization: Bearer &lt;token&gt;，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p><div id="apiToken" class="api-token">读取中…</div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="regenToken()">重新生成 Token</button></div></section>
 </div>
 </section></main></div>
 <div class="modal-bg" id="todoModal"><div class="modal"><h3 id="todoModalTitle">新增待办</h3><div class="field"><label>内容<input id="todoModalContent" placeholder="例如：给花浇水"></label></div><div class="manage-grid"><div class="field"><label>日期（可留空）<input id="todoModalDate" placeholder="YYYY-MM-DD"></label></div><div class="field"><label>时间（可留空）<input id="todoModalTime" placeholder="HH:MM"></label></div></div><div class="modal-actions"><button onclick="closeTodoModal()">取消</button><button class="primary" id="todoModalSave" onclick="submitTodoModal()">保存</button></div></div></div>
+<div class="modal-bg" id="wifiModal"><div class="modal"><h3>新增 Wi-Fi</h3><div class="field"><label>SSID<input id="wifiModalSsid" placeholder="网络名称"></label></div><div class="field"><label>密码<input id="wifiModalPassword" type="password" placeholder="Wi-Fi 密码"></label></div><div class="modal-actions"><button onclick="closeWifiModal()">取消</button><button class="primary" onclick="submitWifiModal()">保存并连接</button></div></div></div>
 <div id="toast" class="toast hidden"></div>
 <script>
 var csrf="",items=[],pages=[],todos=[],lastSuccess=0,setupMode=false,editingKey="",uiSeq=0,dirty=false,lastAudibleVolume=50,todoFilter="all";
@@ -181,7 +191,7 @@ function showDash(){el("auth").classList.add("hidden");el("dashboard").classList
 async function boot(){try{var s=await api("/api/status");if(s.setup_required){showAuth(true);return}if(!s.authenticated){showAuth(false);return}csrf=s.csrf||"";showDash();await loadAll()}catch(e){showAuth(false)}}
 async function login(){var p=el("password").value;if(p.length<8){toast("密码至少 8 位",true);return}try{var d=await api(setupMode?"/api/setup":"/api/login",{method:"POST",body:JSON.stringify({password:p})});csrf=d.csrf||"";el("password").value="";showDash();await loadAll()}catch(e){toast(e.message,true)}}
 async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages");items=q.items||[];items.forEach(keyFor);pages=p.pages||[];editingKey="";dirty=false;el("saveQuotas").textContent="保存全部更改";renderPages();renderDisplaySwitches();renderQuotas();await loadExtras();await status()}
-async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("amap_adcode").value=w.amap_adcode||"";el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice()}
+async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("amap_adcode").value=w.amap_adcode||"";el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice();await loadWifi()}
 function memStatus(bytes,isInternal){var b=Number(bytes||0);var label,danger=false;if(isInternal){if(b<20*1024){label="危险";danger=true}else if(b<30*1024){label="紧张";danger=true}else{label="正常"}}else{if(b<512*1024){label="危险";danger=true}else if(b<2*1024*1024){label="紧张";danger=true}else{label="充足"}}var num=b>=1024*1024?(b/1024/1024).toFixed(1)+" MB":(b/1024).toFixed(1)+" KB";return{txt:label+" "+num,danger:danger}}
 function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=el(elId);e.textContent=s.txt;e.style.color=s.danger?"var(--bad)":""}
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
@@ -191,6 +201,16 @@ async function loadDevice(){var d=await api("/api/device");el("deviceUptime").te
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
 async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
+// Wi-Fi 管理
+async function loadWifi(){try{var d=await api("/api/wifi");el("wifiCurrent").textContent=d.current.connected?d.current.ssid:"未连接";el("wifiIp").textContent=d.current.connected?d.current.ip:"--";el("wifiRssi").textContent=d.current.connected?(d.current.rssi+" dBm"):"--";el("wifiChannel").textContent=d.current.connected?d.current.channel:"--";el("wifiMac").textContent=d.current.mac||"--";el("wifiStatus").textContent=d.current.connected?"已连接":"未连接";renderWifiSaved(d.saved||[])}catch(e){el("wifiCurrent").textContent="加载失败"}}
+function renderWifiSaved(list){if(!list.length){el("wifiSaved").innerHTML='<div class="empty">暂无已保存 Wi-Fi</div>';return}var h="";list.forEach(function(w){h+='<div class="todo-row"><span></span><b>'+esc(w.ssid)+(w.is_current?' <span class="badge">当前</span>':"")+'</b><span></span><span><button onclick="wifiSetDefault('+w.index+')">设默认</button> <button onclick="wifiConnect(\''+esc(w.ssid)+'\')">连接</button> <button class="danger" onclick="wifiDelete('+w.index+')">删除</button></span></div>'});el("wifiSaved").innerHTML=h}
+async function wifiSetDefault(idx){try{await api("/api/wifi/default",{method:"PUT",body:JSON.stringify({index:idx})});toast("已设为默认");loadWifi()}catch(e){toast(e.message,true)}}
+async function wifiDelete(idx){if(!confirm("删除此 Wi-Fi？"))return;try{await api("/api/wifi/"+idx,{method:"DELETE"});toast("已删除");loadWifi()}catch(e){toast(e.message,true)}}
+async function wifiConnect(ssid){if(!confirm("切换到 "+ssid+"？设备将断开当前 Wi-Fi，浏览器可能暂时失去连接。"))return;try{await api("/api/wifi/connect",{method:"POST",body:JSON.stringify({ssid:ssid})});toast("正在切换…")}catch(e){toast(e.message,true)}}
+async function wifiDisconnect(){if(!confirm("断开当前 Wi-Fi？设备将进入离线状态。"))return;try{await api("/api/wifi/disconnect",{method:"POST"});toast("已断开");loadWifi()}catch(e){toast(e.message,true)}}
+function openWifiModal(){el("wifiModalSsid").value="";el("wifiModalPassword").value="";el("wifiModal").classList.add("open");setTimeout(function(){el("wifiModalSsid").focus()},50)}
+function closeWifiModal(){el("wifiModal").classList.remove("open")}
+async function submitWifiModal(){var ssid=el("wifiModalSsid").value.trim(),pass=el("wifiModalPassword").value;if(!ssid){toast("请输入 SSID",true);return}try{await api("/api/wifi",{method:"POST",body:JSON.stringify({ssid:ssid,password:pass})});toast("已保存");closeWifiModal();loadWifi()}catch(e){toast(e.message,true)}}
 async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();var url=URL.createObjectURL(blob);el("screenshotImg").src=url;el("screenshotLink").href=url;el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
 function renderDisplaySwitches(){var sorted=pages.slice().sort(function(a,b){return a.order-b.order});var h="";sorted.forEach(function(p){if(p.enabled)h+='<button onclick="switchPage(\''+p.id+'\')">'+(names[p.id]||p.id)+'</button>'});h+='<button onclick="switchPage(\'toggle\')">下一页</button>';el("displaySwitches").innerHTML=h}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
@@ -505,6 +525,12 @@ bool AdminServer::Start() {
         {"/api/device", HTTP_GET, DeviceHandler, this}, {"/api/device", HTTP_PUT, DeviceHandler, this},
         {"/api/display/switch", HTTP_POST, DisplaySwitchHandler, this},
         {"/api/display/screenshot", HTTP_GET, ScreenshotHandler, this},
+        {"/api/wifi", HTTP_GET, WifiListHandler, this},
+        {"/api/wifi", HTTP_POST, WifiAddHandler, this},
+        {"/api/wifi/default", HTTP_PUT, WifiDefaultHandler, this},
+        {"/api/wifi/connect", HTTP_POST, WifiConnectHandler, this},
+        {"/api/wifi/disconnect", HTTP_POST, WifiDisconnectHandler, this},
+        {"/api/wifi/*", HTTP_DELETE, WifiDeleteHandler, this},
     };
     for (const auto& route : routes) httpd_register_uri_handler(server_, &route);
     if (LoadSession()) {
@@ -845,4 +871,132 @@ esp_err_t AdminServer::ScreenshotHandler(httpd_req_t* req) {
     httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"screenshot.png\"");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, png.data(), png.size());
+}
+
+// ==================== Wi-Fi 管理 ====================
+
+esp_err_t AdminServer::WifiListHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, false)) return Error(req, 401, "未登录");
+    auto& wifi = WifiManager::GetInstance();
+    auto& sm = SsidManager::GetInstance();
+
+    cJSON* root = cJSON_CreateObject();
+    cJSON* cur = cJSON_CreateObject();
+    cJSON_AddBoolToObject(cur, "connected", wifi.IsConnected());
+    if (wifi.IsConnected()) {
+        cJSON_AddStringToObject(cur, "ssid", wifi.GetSsid().c_str());
+        cJSON_AddStringToObject(cur, "ip", wifi.GetIpAddress().c_str());
+        cJSON_AddNumberToObject(cur, "rssi", wifi.GetRssi());
+        cJSON_AddNumberToObject(cur, "channel", wifi.GetChannel());
+        cJSON_AddStringToObject(cur, "mac", wifi.GetMacAddress().c_str());
+    }
+    cJSON_AddItemToObject(root, "current", cur);
+
+    cJSON* saved = cJSON_CreateArray();
+    const auto& list = sm.GetSsidList();
+    for (size_t i = 0; i < list.size(); ++i) {
+        cJSON* item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "index", static_cast<double>(i));
+        cJSON_AddStringToObject(item, "ssid", list[i].ssid.c_str());
+        cJSON_AddBoolToObject(item, "is_current", wifi.IsConnected() && wifi.GetSsid() == list[i].ssid);
+        cJSON_AddItemToArray(saved, item);
+    }
+    cJSON_AddItemToObject(root, "saved", saved);
+
+    char* raw = cJSON_PrintUnformatted(root);
+    std::string out = raw ? raw : "{}";
+    if (raw) cJSON_free(raw);
+    cJSON_Delete(root);
+    return Json(req, out);
+}
+
+esp_err_t AdminServer::WifiAddHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    cJSON* root = cJSON_Parse(body.c_str());
+    cJSON* ssid_item = root ? cJSON_GetObjectItem(root, "ssid") : nullptr;
+    cJSON* pass_item = root ? cJSON_GetObjectItem(root, "password") : nullptr;
+    std::string ssid = cJSON_IsString(ssid_item) ? ssid_item->valuestring : "";
+    std::string password = cJSON_IsString(pass_item) ? pass_item->valuestring : "";
+    if (root) cJSON_Delete(root);
+    if (ssid.empty() || ssid.size() > 32) return Error(req, 400, "SSID 无效");
+    if (password.size() > 64) return Error(req, 400, "密码过长");
+    SsidManager::GetInstance().AddSsid(ssid, password);
+    return Json(req, "{\"ok\":true}");
+}
+
+esp_err_t AdminServer::WifiDeleteHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    // 从 URI 提取 index: /api/wifi/{index}
+    const char* uri = req->uri;
+    const char* prefix = "/api/wifi/";
+    if (strncmp(uri, prefix, strlen(prefix)) != 0) return Error(req, 400, "路径无效");
+    const char* idx_str = uri + strlen(prefix);
+    char* end = nullptr;
+    long idx = strtol(idx_str, &end, 10);
+    if (!end || *end != '\0' || idx < 0) return Error(req, 400, "索引无效");
+    auto& sm = SsidManager::GetInstance();
+    if (static_cast<size_t>(idx) >= sm.GetSsidList().size()) return Error(req, 404, "不存在");
+    sm.RemoveSsid(static_cast<int>(idx));
+    return Json(req, "{\"ok\":true}");
+}
+
+esp_err_t AdminServer::WifiDefaultHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    cJSON* root = cJSON_Parse(body.c_str());
+    cJSON* idx_item = root ? cJSON_GetObjectItem(root, "index") : nullptr;
+    if (!cJSON_IsNumber(idx_item) || idx_item->valueint < 0) {
+        if (root) cJSON_Delete(root);
+        return Error(req, 400, "索引无效");
+    }
+    int idx = idx_item->valueint;
+    if (root) cJSON_Delete(root);
+    auto& sm = SsidManager::GetInstance();
+    if (static_cast<size_t>(idx) >= sm.GetSsidList().size()) return Error(req, 404, "不存在");
+    sm.SetDefaultSsid(idx);
+    return Json(req, "{\"ok\":true}");
+}
+
+esp_err_t AdminServer::WifiConnectHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    cJSON* root = cJSON_Parse(body.c_str());
+    cJSON* ssid_item = root ? cJSON_GetObjectItem(root, "ssid") : nullptr;
+    std::string ssid = cJSON_IsString(ssid_item) ? ssid_item->valuestring : "";
+    if (root) cJSON_Delete(root);
+    if (ssid.empty()) return Error(req, 400, "SSID 为空");
+
+    auto& sm = SsidManager::GetInstance();
+    const auto& list = sm.GetSsidList();
+    for (const auto& item : list) {
+        if (item.ssid == ssid) {
+            // 找到保存的凭据，触发重连
+            Application::GetInstance().Schedule([ssid = item.ssid, password = item.password]() {
+                auto& wifi = WifiManager::GetInstance();
+                wifi.StopStation();
+                vTaskDelay(pdMS_TO_TICKS(500));
+                // AddSsid 已存在则去重（SsidManager 内部处理）
+                SsidManager::GetInstance().AddSsid(ssid, password);
+                wifi.StartStation();
+            });
+            return Json(req, "{\"ok\":true,\"note\":\"正在切换，浏览器可能失去连接\"}");
+        }
+    }
+    return Error(req, 404, "SSID 不在已保存列表");
+}
+
+esp_err_t AdminServer::WifiDisconnectHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    WifiManager::GetInstance().StopStation();
+    return Json(req, "{\"ok\":true}");
 }

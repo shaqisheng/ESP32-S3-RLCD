@@ -56,4 +56,10 @@ private:
     static esp_err_t DeviceHandler(httpd_req_t* req);
     static esp_err_t DisplaySwitchHandler(httpd_req_t* req);
     static esp_err_t ScreenshotHandler(httpd_req_t* req);
+    static esp_err_t WifiListHandler(httpd_req_t* req);
+    static esp_err_t WifiAddHandler(httpd_req_t* req);
+    static esp_err_t WifiDeleteHandler(httpd_req_t* req);
+    static esp_err_t WifiDefaultHandler(httpd_req_t* req);
+    static esp_err_t WifiConnectHandler(httpd_req_t* req);
+    static esp_err_t WifiDisconnectHandler(httpd_req_t* req);
 };
