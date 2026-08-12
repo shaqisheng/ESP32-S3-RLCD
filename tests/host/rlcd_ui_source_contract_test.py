@@ -463,6 +463,31 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn('"/api/refresh-interval"', admin)
         self.assertIn("quotaRefreshMinutes", admin)
 
+    def test_kimi_reset_time_parses_iso8601_not_ms(self):
+        """Kimi /coding/v1/usages 的 resetTime 是 ISO 8601 字符串
+        （如 "2026-08-11T15:53:05Z"），不是毫秒时间戳。回归：原来用
+        JsonNumber 会触发 atof('2026-08-11...')=2026，/1000 后变成 Unix
+        秒 2，导致永远显示"即将重置"。"""
+        quota = (BOARD / "managers/quota_manager.cc").read_text()
+        self.assertIn("ParseIso8601ToUnix", quota)
+        self.assertIn("ParseResetAt", quota)
+        # Kimi 必须用 ISO 感知解析器，不能再直接 JsonNumber/1000
+        self.assertIn('ParseResetAt(detail, "resetTime")', quota)
+        self.assertIn('ParseResetAt(usage, "resetTime")', quota)
+        # 同样用 ParseResetAt 兼容 GLM（数字）和未来可能变更
+        self.assertIn('ParseResetAt(item, "nextResetTime")', quota)
+        # 算法注释存在以便后续维护者理解为什么不用 timegm
+        self.assertIn("Howard Hinnant", quota)
+
+    def test_parse_iso8601_handles_real_kimi_response_format(self):
+        """算法自检：用 Python datetime 求权威 Unix 秒，
+        对应 C++ 端 ParseIso8601ToUnix("2026-08-11T15:53:05Z") 应得到相同值。
+        2026-08-11 是该年第 223 天，但距 1月1日只有 222 天。"""
+        import datetime
+        dt = datetime.datetime(2026, 8, 11, 15, 53, 5,
+                               tzinfo=datetime.timezone.utc)
+        self.assertEqual(int(dt.timestamp()), 1786463585)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-08-12 — 修复 Kimi/GLM 配额重置时间显示不准
+
+- **修改内容**：
+  - `quota_manager.cc` 匿名 namespace 新增 `ParseIso8601ToUnix(s)`（手算 Howard Hinnant days_from_civil，避免依赖 timegm）和 `ParseResetAt(obj, key)`（自动识别 3 种格式：JSON 数字→/1000；ISO 8601 字符串→直接解析；数字字符串→atof+/1000）
+  - Kimi 解析：`JsonNumber(detail, "resetTime") / 1000` → `ParseResetAt(detail, "resetTime")`；usage 路径同样改
+  - GLM 解析：`JsonNumber(item, "nextResetTime") / 1000` → `ParseResetAt(item, "nextResetTime")`（防御性，未来 API 变更也兼容）
+  - `tests/host/rlcd_ui_source_contract_test.py` 新增 2 个契约测试（要求 ParseIso8601ToUnix 存在、Kimi/GLM 用 ParseResetAt；算法自检对 2026-08-11T15:53:05Z 求 Unix 秒）
+- **修改原因**：用户反馈 AI 页面 Kimi 和 GLM 重置时间不准。研究官方实现（opencode-glm-quota、cc-switch、CodexBar、getpaseo/paseo #3024 真实响应）后定位根因：
+  - **Kimi `resetTime` 实际是 ISO 8601 字符串**（如 `"2026-08-11T15:53:05.519605Z"`），但代码当 ms 数字处理。`JsonNumber` 对字符串调 `atof`，遇 `-` 停止返回 2026，再 `/1000 = 2`（Unix 秒 2 = 1970-01-01 00:00:02），`FormatReset` 算"已过期" → 永远显示"即将重置"
+  - GLM `nextResetTime` 是 Unix 毫秒数，原代码正确；但统一改用 `ParseResetAt` 防御未来变更
+- **影响范围**：只动 quota 解析逻辑；API 路由、manager 接口、UI 显示、NVS schema、其他 provider（codex/deepseek/generic-json/manual）均不变。
+- **测试结果**：
+  - Python 契约测试: ✅ 44 个全过（含新增 2 个）
+  - 算法正确性自检: ✅ 6 个边界用例（真实 Kimi 响应、年初/末、闰日 2024-02-29、epoch）全部与 Python datetime 权威值一致
+  - `git diff --check`: ✅
+  - idf.py build: ✅（增量；xiaozhi.bin 4891920 → 4891520，-400 字节，因编译器优化）
+  - 真机烧录 + 串口 60s: ✅（0 异常；完整启动；Open-Meteo 七日天气正常）
+  - 真实 Kimi/GLM 刷新后显示正确重置时间: ⏳ 由用户在后台实测（需要用户已配置 Kimi/GLM 账号且触发一次刷新）
+- **回滚方式**：`git revert` 本次 commit；或恢复 3 处 `ParseResetAt(...)` 调用为原 `JsonNumber(...)/1000`（Kimi 仍会回到 buggy 状态，GLM 仍正确）
+- **关联文档**：
+  - 上游参考：[opencode-glm-quota](https://github.com/guyinwonder168/opencode-glm-quota/blob/main/src/index.ts)、[cc-switch discussion #1038](https://github.com/farion1231/cc-switch/discussions/1038)、[getpaseo/paseo #3024 真实 Kimi 响应](https://github.com/getpaseo/paseo/issues/3024)、[CodexBar docs/zai.md](https://github.com/steipete/CodexBar/blob/main/docs/zai.md)
+  - 遵守 AGENTS §5.2（不动 manager 接口；不破坏既有 provider 解析）
+
+---
+
 ## 2026-08-12 — 后台 UI 重构：Tab 分组 + 按钮 loading 态 + 待办模态框
 
 - **修改内容**：仅改 `admin_server.cc` 的 `kAdminHtml` 字符串（45 行 diff）

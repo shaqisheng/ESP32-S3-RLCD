@@ -64,6 +64,44 @@ double JsonNumber(cJSON* obj, const char* key, double fallback = 0) {
     return fallback;
 }
 
+// 解析 ISO 8601 字符串（如 "2026-08-11T15:53:05.519605Z"）为 Unix 秒（UTC）。
+// 用 Howard Hinnant 的 days_from_civil 算法手算，避免依赖 timegm。
+// 解析失败返回 0。Kimi 的 resetTime 字段用这种格式。
+int64_t ParseIso8601ToUnix(const std::string& iso) {
+    int y = 0, mo = 0, d = 0, h = 0, mi = 0, s = 0;
+    if (sscanf(iso.c_str(), "%d-%d-%dT%d:%d:%d", &y, &mo, &d, &h, &mi, &s) != 6) return 0;
+    if (mo < 1 || mo > 12 || y < 1970 || y > 2100) return 0;
+    int yi = y - (mo <= 2);
+    const int era = (yi >= 0 ? yi : yi - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(yi - era * 400);
+    const unsigned doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    const int days = era * 146097 + static_cast<int>(doe) - 719468;
+    return static_cast<int64_t>(days) * 86400 + h * 3600 + mi * 60 + s;
+}
+
+// 解析"重置时间"字段，兼容三种返回格式：
+//   1. JSON 数字（Unix 毫秒，如 GLM 的 nextResetTime）→ /1000
+//   2. ISO 8601 字符串（如 Kimi 的 resetTime "2026-08-11T15:53:05Z"）→ 直接解析
+//   3. 数字字符串（防御性，"1748523456000"）→ atof + /1000
+// 返回 Unix 秒（UTC）或 0（缺失/无效）。
+int64_t ParseResetAt(cJSON* obj, const char* key) {
+    cJSON* value = cJSON_GetObjectItemCaseSensitive(obj, key);
+    if (!value) return 0;
+    if (cJSON_IsNumber(value)) {
+        return static_cast<int64_t>(value->valuedouble / 1000.0);
+    }
+    if (cJSON_IsString(value) && value->valuestring && value->valuestring[0]) {
+        const std::string s = value->valuestring;
+        if (s.size() >= 10 && s[4] == '-' && s[7] == '-') {
+            return ParseIso8601ToUnix(s);
+        }
+        const double n = atof(s.c_str());
+        if (n > 0) return static_cast<int64_t>(n / 1000.0);
+    }
+    return 0;
+}
+
 bool JsonBool(cJSON* obj, const char* key, bool fallback) {
     cJSON* value = cJSON_GetObjectItemCaseSensitive(obj, key);
     return cJSON_IsBool(value) ? cJSON_IsTrue(value) : fallback;
@@ -325,7 +363,7 @@ bool QuotaManager::ParseResponse(const Entry& entry, const char* json, QuotaCard
             tier.total = JsonNumber(detail, "limit");
             tier.remaining = JsonNumber(detail, "remaining");
             tier.used_percent = tier.total > 0 ? ClampPercent((tier.total - tier.remaining) * 100 / tier.total) : -1;
-            tier.reset_at = static_cast<int64_t>(JsonNumber(detail, "resetTime") / 1000);
+            tier.reset_at = ParseResetAt(detail, "resetTime");
             card.tiers.push_back(tier);
         }
         cJSON* usage = cJSON_GetObjectItem(root, "usage");
@@ -335,7 +373,7 @@ bool QuotaManager::ParseResponse(const Entry& entry, const char* json, QuotaCard
             tier.total = JsonNumber(usage, "limit");
             tier.remaining = JsonNumber(usage, "remaining");
             tier.used_percent = tier.total > 0 ? ClampPercent((tier.total - tier.remaining) * 100 / tier.total) : -1;
-            tier.reset_at = static_cast<int64_t>(JsonNumber(usage, "resetTime") / 1000);
+            tier.reset_at = ParseResetAt(usage, "resetTime");
             card.tiers.push_back(tier);
         }
     } else if (entry.provider == "glm-cn" || entry.provider == "glm-global") {
@@ -351,7 +389,7 @@ bool QuotaManager::ParseResponse(const Entry& entry, const char* json, QuotaCard
             tier.total = 100;
             tier.remaining = 100 - tier.used_percent;
             tier.unit = "%";
-            tier.reset_at = static_cast<int64_t>(JsonNumber(item, "nextResetTime") / 1000);
+            tier.reset_at = ParseResetAt(item, "nextResetTime");
             card.tiers.push_back(tier);
         }
     } else if (entry.provider == "deepseek") {
