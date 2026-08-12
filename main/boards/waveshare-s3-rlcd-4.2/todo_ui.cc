@@ -45,12 +45,14 @@ void CustomLcdDisplay::SetupTodoUI() {
     MakePlain(todo_page_, lv_color_white());
 
     // 顶部黑底白字 header 条（与 weather/quota/forecast 一致风格）
+    // 注意：label 必须创建在 page 上（不能是 strip 的子元素），否则会被
+    // strip 容器 clip + 受 pad 影响，导致文字中段被裁。参考 forecast_ui.cc。
     todo_header_strip_ = lv_obj_create(todo_page_);
     lv_obj_set_size(todo_header_strip_, 400, kHeaderHeight);
     lv_obj_set_pos(todo_header_strip_, 0, 0);
     MakePlain(todo_header_strip_, lv_color_black());
 
-    todo_header_label_ = lv_label_create(todo_header_strip_);
+    todo_header_label_ = lv_label_create(todo_page_);
     lv_obj_set_pos(todo_header_label_, 12, 8);
     lv_obj_set_size(todo_header_label_, 376, 32);
     lv_obj_set_style_text_font(todo_header_label_, &alibaba_puhui_24, 0);
@@ -97,12 +99,12 @@ void CustomLcdDisplay::SetupTodoUI() {
     }
     lv_obj_add_flag(todo_empty_icon_, LV_OBJ_FLAG_HIDDEN);
 
-    // 空状态文字
+    // 空状态文字（用黑色而不是灰，白底上对比度足够）
     todo_empty_text_ = lv_label_create(todo_page_);
     lv_obj_set_pos(todo_empty_text_, 0, 230);
     lv_obj_set_size(todo_empty_text_, 400, 30);
     lv_obj_set_style_text_font(todo_empty_text_, &font_puhui_16_4, 0);
-    lv_obj_set_style_text_color(todo_empty_text_, lv_color_hex(0x72756d), 0);
+    lv_obj_set_style_text_color(todo_empty_text_, lv_color_black(), 0);
     lv_obj_set_style_text_align(todo_empty_text_, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(todo_empty_text_, "暂无待办");
     lv_obj_add_flag(todo_empty_text_, LV_OBJ_FLAG_HIDDEN);

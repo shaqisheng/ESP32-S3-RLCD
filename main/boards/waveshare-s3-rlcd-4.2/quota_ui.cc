@@ -226,7 +226,7 @@ void CustomLcdDisplay::SetupQuotaUI() {
         quota_tier_labels_[i][1] = lv_label_create(card);
         StyleText(quota_tier_labels_[i][1], &font_puhui_14_1, foreground, LV_OPA_80);
         lv_obj_set_pos(quota_tier_labels_[i][1], 4, QUOTA_COMPACT_SECONDARY_Y);
-        lv_obj_set_width(quota_tier_labels_[i][1], 170);
+        lv_obj_set_width(quota_tier_labels_[i][1], 180);
         lv_label_set_long_mode(quota_tier_labels_[i][1], LV_LABEL_LONG_DOT);
         lv_label_set_text(quota_tier_labels_[i][1], "--");
 
@@ -374,15 +374,17 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
         }
 
         // 进度条下方：周额度剩余% + 重置时间(日时) + 倒计时。
+        // 紧凑格式（去掉 "周" 前缀和 "·" 分隔，节省宽度避免被 LONG_DOT 截断）：
+        // 上方进度条已表明是周额度，前缀冗余；分隔用空格更紧凑。
         char when[32], countdown[32];
         FormatResetAbsolute(weekly.reset_at, when, sizeof(when));
         FormatResetCountdown(weekly.reset_at, countdown, sizeof(countdown));
         if (weekly_remaining >= 0) {
             if (when[0] && countdown[0]) {
-                snprintf(text, sizeof(text), "%s %d%% · %s · %s",
-                         weekly.label.c_str(), weekly_remaining, when, countdown);
+                snprintf(text, sizeof(text), "%d%% %s %s",
+                         weekly_remaining, when, countdown);
             } else {
-                snprintf(text, sizeof(text), "%s %d%%", weekly.label.c_str(), weekly_remaining);
+                snprintf(text, sizeof(text), "%d%%", weekly_remaining);
             }
         } else {
             snprintf(text, sizeof(text), "%s", primary.label.c_str());
