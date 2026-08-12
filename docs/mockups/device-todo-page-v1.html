@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设备屏 待办页 mockup v1</title>
+<style>
+/* 模拟 400×300 1-bit RLCD，外层放大 1.6x 方便查看 */
+body{margin:0;padding:24px;background:#444;color:#fff;font-family:ui-monospace,Menlo,monospace}
+.frame{display:inline-block;padding:18px;background:#222;border-radius:6px;box-shadow:0 4px 18px rgba(0,0,0,0.4)}
+.rlcd{
+  width:640px;height:480px;  /* 400×300 × 1.6 */
+  background:#fff;color:#000;position:relative;overflow:hidden;
+  border:2px solid #888;
+}
+.rlcd > *{position:absolute;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+
+/* header 黑底白字 */
+.header-strip{background:#000;left:0;top:0;width:640px;height:77px}  /* 400×48 × 1.6 */
+
+/* 模拟字体（设备用 puhui 24/16/14，这里用相近 system 字号 × 1.6） */
+.font-24{font-size:38px;font-weight:700;font-family:"PingFang SC",system-ui,sans-serif}
+.font-16{font-size:26px;font-family:"PingFang SC",system-ui,sans-serif}
+.font-14{font-size:22px;color:#666;font-family:"PingFang SC",system-ui,sans-serif}
+.font-48{font-size:77px;font-family:"PingFang SC",system-ui,sans-serif;line-height:1;color:#000}
+.font-empty-text{font-size:32px;font-family:"PingFang SC",system-ui,sans-serif;color:#333}
+
+/* 切换按钮区 */
+.controls{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+.controls button{font:inherit;padding:7px 12px;background:#222;color:#fff;border:1px solid #555;cursor:pointer;border-radius:4px}
+.controls button.active{background:#ddff35;color:#000;border-color:#ddff35}
+.controls button:hover{background:#333}
+.note{margin-top:14px;color:#999;font-size:12px;line-height:1.5;max-width:640px}
+.label{margin-bottom:10px;color:#aaa;font-size:12px}
+.section{margin-top:18px;color:#aaa;font-size:12px}
+hr{border:0;border-top:1px solid #555;margin:14px 0}
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="label">400×300 RLCD mockup · 1.6x 缩放预览 · 黑顶白底（header 黑，列表白）</div>
+  <div class="rlcd" id="screen"></div>
+
+  <div class="section">切换状态：</div>
+  <div class="controls" id="stateCtrl">
+    <button data-state="normal" class="active">普通 5 项</button>
+    <button data-state="overflow">超长 8 项</button>
+    <button data-state="empty">空（关键状态）</button>
+    <button data-state="few">2 项</button>
+    <button data-state="no-date">部分无日期</button>
+  </div>
+
+  <div class="section">空状态图标方案（1-bit 单色友好）：</div>
+  <div class="controls" id="iconCtrl">
+    <button data-icon="none-char" class="active">大字"无"</button>
+    <button data-icon="done-char">大字"完成"</button>
+    <button data-icon="check-draw">手绘 ✓</button>
+    <button data-icon="list-draw">手绘空白清单</button>
+  </div>
+
+  <div class="note">
+    说明：设备实机字体是 Alibaba Puhui 24/16/14。mockup 用 PingFang SC 近似。
+    "黑底白字" 与 weather / quota / forecast 三个页面风格一致（calendar 例外用白底纸张感）。<br>
+    实机图标渲染依赖 LV_SYMBOL 字体或 emoji 字体，可能略有差异。
+  </div>
+</div>
+
+<script>
+const STATES = {
+  normal: {
+    header: "待办 · 5 项未完成",
+    rows: [
+      ["08-12 18:00", "回复邮件"],
+      ["08-15 09:00", "给花浇水"],
+      ["08-20", "提交月度报告"],
+      ["08-25", "买生日礼物"],
+      ["09-01", "续订杂志"],
+    ],
+    overflow: 0
+  },
+  overflow: {
+    header: "待办 · 8 项未完成",
+    rows: [
+      ["08-12 18:00", "回复邮件"],
+      ["08-15 09:00", "给花浇水"],
+      ["08-20", "提交月度报告"],
+      ["08-25", "买生日礼物"],
+      ["09-01", "续订杂志"],
+    ],
+    overflow: 3
+  },
+  empty: {
+    header: "待办 · 暂无未完成",
+    rows: [],
+    overflow: 0
+  },
+  few: {
+    header: "待办 · 2 项未完成",
+    rows: [
+      ["08-15 09:00", "给花浇水"],
+      ["08-20", "提交月度报告"],
+    ],
+    overflow: 0
+  },
+  "no-date": {
+    header: "待办 · 3 项未完成",
+    rows: [
+      ["", "随手记一下"],
+      ["", "整理桌面"],
+      ["08-15 09:00", "给花浇水"],
+    ],
+    overflow: 0
+  }
+};
+
+const ICONS = {
+  "none-char":   { type: "char", glyph: "无",  text: "暂无待办" },
+  "done-char":   { type: "char", glyph: "完成", text: "全部任务已完成", small: true },
+  "check-draw":  { type: "shape", shape: "check", text: "全部完成" },
+  "list-draw":   { type: "shape", shape: "list",  text: "暂无待办" }
+};
+
+let currentState = "normal";
+let currentIcon = "list";
+
+const screen = document.getElementById("screen");
+const S = 1.6;
+function px(x){return (x*S)+"px"}
+
+function render(){
+  const s = STATES[currentState];
+  screen.innerHTML = "";
+
+  // header 黑底白字条（顶部 48px）
+  const headerBg = document.createElement("div");
+  headerBg.className = "header-strip";
+  screen.appendChild(headerBg);
+
+  const header = document.createElement("div");
+  header.className = "font-24";
+  header.style.color = "#fff";
+  header.style.left = px(12);
+  header.style.top = px(10);
+  header.style.width = px(376);
+  header.textContent = s.header;
+  screen.appendChild(header);
+
+  if (s.rows.length === 0) {
+    // 空状态：图标 + 文字居中（白底黑字区域）
+    const ic = ICONS[currentIcon];
+
+    if (ic.type === "char") {
+      // 大字方案：单/双字 + 文字
+      const glyph = document.createElement("div");
+      glyph.style.fontFamily = '"PingFang SC",system-ui,sans-serif';
+      glyph.style.fontWeight = "700";
+      glyph.style.color = "#000";
+      glyph.style.fontSize = ic.small ? "120px" : "180px";  // 单字更大
+      glyph.style.lineHeight = "1";
+      glyph.style.left = px(0);
+      glyph.style.top = ic.small ? px(110) : px(95);
+      glyph.style.width = px(400);
+      glyph.style.textAlign = "center";
+      glyph.textContent = ic.glyph;
+      screen.appendChild(glyph);
+    } else if (ic.type === "shape") {
+      // 手绘方案：SVG 模拟 LVGL 线条绘制
+      const shape = document.createElement("div");
+      shape.style.left = px(0);
+      shape.style.top = px(100);
+      shape.style.width = px(400);
+      shape.style.height = px(110);
+      shape.style.display = "flex";
+      shape.style.justifyContent = "center";
+      shape.style.alignItems = "center";
+      if (ic.shape === "check") {
+        // 粗线条 ✓ 打勾
+        shape.innerHTML = '<svg width="160" height="120" viewBox="0 0 160 120">' +
+          '<polyline points="10,65 55,110 150,15" fill="none" stroke="#000" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '</svg>';
+      } else {
+        // 空白清单：方框 + 几条横线
+        shape.innerHTML = '<svg width="120" height="130" viewBox="0 0 120 130">' +
+          '<rect x="15" y="10" width="90" height="110" fill="none" stroke="#000" stroke-width="6" rx="4"/>' +
+          '<line x1="35" y1="40" x2="85" y2="40" stroke="#000" stroke-width="5" stroke-linecap="round"/>' +
+          '<line x1="35" y1="65" x2="85" y2="65" stroke="#000" stroke-width="5" stroke-linecap="round"/>' +
+          '<line x1="35" y1="90" x2="65" y2="90" stroke="#000" stroke-width="5" stroke-linecap="round"/>' +
+          '</svg>';
+      }
+      screen.appendChild(shape);
+    }
+
+    const text = document.createElement("div");
+    text.className = "font-empty-text";
+    text.style.left = px(0);
+    text.style.top = ic.type === "char" && !ic.small ? px(225) : px(225);
+    text.style.width = px(400);
+    text.style.textAlign = "center";
+    text.textContent = ic.text;
+    screen.appendChild(text);
+    return;
+  }
+
+  // 5 行待办（白底黑字）
+  const startY = 58;
+  const rowH = 36;
+  for (let i = 0; i < 5; i++) {
+    const row = document.createElement("div");
+    row.className = "font-16";
+    row.style.left = px(12);
+    row.style.top = px(startY + i * rowH);
+    row.style.width = px(376);
+    row.style.height = px(rowH);
+    row.style.lineHeight = px(rowH);
+    if (i < s.rows.length) {
+      const [date, content] = s.rows[i];
+      const dateStr = date ? `<span style="color:#666">${date}</span>  ` : "";
+      row.innerHTML = `□ ${dateStr}${content}`;
+    } else {
+      row.innerHTML = "";
+    }
+    screen.appendChild(row);
+  }
+
+  // overflow
+  if (s.overflow > 0) {
+    const of = document.createElement("div");
+    of.className = "font-14";
+    of.style.left = px(12);
+    of.style.top = px(startY + 5 * rowH + 6);
+    of.textContent = `... 还有 ${s.overflow} 项`;
+    screen.appendChild(of);
+  }
+}
+
+render();
+
+document.querySelectorAll("#stateCtrl button").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("#stateCtrl button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentState = btn.dataset.state;
+    render();
+  };
+});
+document.querySelectorAll("#iconCtrl button").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("#iconCtrl button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentIcon = btn.dataset.icon;
+    if (currentState === "empty") render();
+  };
+});
+</script>
+
+</body>
+</html>
