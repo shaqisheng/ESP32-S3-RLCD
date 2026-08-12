@@ -12,6 +12,7 @@
 #include "settings.h"
 #include "assets/lang_config.h"
 #include "jpg/image_to_jpeg.h"
+#include "boards/waveshare-s3-rlcd-4.2/custom_lcd_display.h"
 
 #define TAG "Display"
 
@@ -339,6 +340,12 @@ void AppendBe16(std::string& out, uint16_t v) {
     out += static_cast<char>(v & 0xff);
 }
 
+// zlib stored block 的 LEN/NLEN 是 little-endian（RFC 1951）
+void AppendLe16(std::string& out, uint16_t v) {
+    out += static_cast<char>(v & 0xff);
+    out += static_cast<char>((v >> 8) & 0xff);
+}
+
 void AppendChunk(std::string& out, const char* type, const std::string& data) {
     AppendBe32(out, static_cast<uint32_t>(data.size()));
     size_t type_pos = out.size();
@@ -359,8 +366,8 @@ std::string ZlibStore(const std::string& raw) {
         uint16_t block_len = static_cast<uint16_t>(std::min<size_t>(65535, raw.size() - pos));
         bool final = (pos + block_len == raw.size());
         out += static_cast<char>(final ? 0x01 : 0x00);  // BFINAL + BTYPE=00 (stored)
-        AppendBe16(out, block_len);
-        AppendBe16(out, ~block_len);
+        AppendLe16(out, block_len);   // LEN 是 little-endian（RFC 1951）
+        AppendLe16(out, ~block_len);  // NLEN = ~LEN（1 的补码）
         out.append(raw.data() + pos, block_len);
         pos += block_len;
     }
@@ -369,63 +376,66 @@ std::string ZlibStore(const std::string& raw) {
 }
 }  // namespace
 
-bool LvglDisplay::SnapshotToPng1bit(std::string& png_data, uint8_t threshold) {
+bool LvglDisplay::SnapshotToPng1bit(std::string& png_data, uint8_t /*threshold*/) {
 #if CONFIG_LV_USE_SNAPSHOT
-    DisplayLockGuard lock(this);
-
-    lv_obj_t* screen = lv_screen_active();
-    lv_draw_buf_t* draw_buffer = lv_snapshot_take(screen, LV_COLOR_FORMAT_RGB565);
-    if (draw_buffer == nullptr) {
-        ESP_LOGE(TAG, "Failed to take snapshot, draw_buffer is nullptr");
+    // 对 RLCD 屏：lv_snapshot_take 返回的是 LVGL 内部 framebuffer（内容可能为空
+    // 因 RLCD 用 flush_cb 推到独立 PSRAM DispBuffer）。直接从 RLCD DispBuffer 反解
+    // 1-bit 像素（屏幕真实显示的内容），打包成标准 PNG 1-bit 灰度格式。
+    //
+    // 这里不用 DisplayLockGuard——DispBuffer 是 PSRAM 字节数组，RLCD flush 时
+    // 已持有 LVGL 锁，此时读不会有竞争。若 reader 与 writer 并发最坏读到半帧，
+    // 不影响正确性。
+    auto* custom = static_cast<CustomLcdDisplay*>(this);
+    if (!custom || !custom->rlcd()) {
+        ESP_LOGE(TAG, "CustomLcdDisplay or RlcdDriver not available");
+        return false;
+    }
+    const uint8_t* buf = custom->rlcd()->disp_buffer();
+    const int len = custom->rlcd()->disp_buffer_len();
+    const int width = custom->rlcd()->width();
+    const int height = custom->rlcd()->height();
+    if (!buf || len <= 0 || width != 400 || height != 300) {
+        ESP_LOGE(TAG, "DispBuffer invalid: buf=%p len=%d w=%d h=%d", buf, len, width, height);
         return false;
     }
 
-    const int width = draw_buffer->header.w;
-    const int height = draw_buffer->header.h;
-    if (width % 8 != 0) {
-        ESP_LOGE(TAG, "Width %d not multiple of 8", width);
-        lv_draw_buf_destroy(draw_buffer);
-        return false;
-    }
-
-    // RGB565 像素数据：lv_snapshot_take 返回的 uint16_t 就是 RGB565 原值，
-    // ESP32 小端内存中直接用 (px >> 11) & 0x1f 等位运算提取即可。
-    // 不要 bswap16——那是 JPEG 编码器要求网络字节序才做的。
-    uint16_t* pixels = reinterpret_cast<uint16_t*>(draw_buffer->data);
-
-    // 转成 1-bit 行数据（每行前面加 filter type 0）
-    const int row_bytes = (width + 7) / 8;
+    // RLCD 4×2 打包格式（rlcd_driver.cc InitLandscapeLUT）反向解码：
+    //   byte_x = x >> 1; local_x = x & 1
+    //   inv_y = height - 1 - y; block_y = inv_y >> 2; local_y = inv_y & 3
+    //   index = byte_x * H4 + block_y     （H4 = height / 4 = 75）
+    //   bit = 7 - ((local_y << 1) | local_x)
+    const int H4 = height >> 2;
+    const int row_bytes = (width + 7) / 8;  // 400 → 50
     std::string raw;
     raw.reserve((row_bytes + 1) * height);
+
     for (int y = 0; y < height; ++y) {
-        raw += static_cast<char>(0x00);  // filter: none
+        raw += static_cast<char>(0x00);  // PNG filter: none
+        const int inv_y = height - 1 - y;
+        const int block_y = inv_y >> 2;
+        const int local_y = inv_y & 3;
         for (int x_byte = 0; x_byte < row_bytes; ++x_byte) {
-            uint8_t byte = 0;
-            for (int bit = 0; bit < 8; ++bit) {
-                int x = x_byte * 8 + bit;
+            uint8_t out_byte = 0;
+            for (int bit_pos = 0; bit_pos < 8; ++bit_pos) {
+                const int x = x_byte * 8 + bit_pos;
                 if (x < width) {
-                    uint16_t px = pixels[y * width + x];
-                    // RGB565 → 亮度（简单估算）
-                    uint8_t r = (px >> 11) & 0x1f;
-                    uint8_t g = (px >> 5) & 0x3f;
-                    uint8_t b = px & 0x1f;
-                    uint8_t lum = (r * 76 + g * 150 + b * 29) / 255;
-                    if (lum >= threshold) byte |= (0x80 >> bit);
+                    const int byte_x = x >> 1;
+                    const int local_x = x & 1;
+                    const int index = byte_x * H4 + block_y;
+                    const int src_bit = 7 - ((local_y << 1) | local_x);
+                    const bool is_white = (buf[index] >> src_bit) & 1;
+                    if (is_white) out_byte |= (0x80 >> bit_pos);
                 }
             }
-            raw += static_cast<char>(byte);
+            raw += static_cast<char>(out_byte);
         }
     }
 
-    lv_draw_buf_destroy(draw_buffer);
-
-    // 打包 PNG
+    // PNG 打包
     png_data.clear();
-    // PNG signature
     const uint8_t sig[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
     png_data.append(reinterpret_cast<const char*>(sig), 8);
 
-    // IHDR chunk
     std::string ihdr;
     AppendBe32(ihdr, width);
     AppendBe32(ihdr, height);
@@ -436,13 +446,9 @@ bool LvglDisplay::SnapshotToPng1bit(std::string& png_data, uint8_t threshold) {
     ihdr += static_cast<char>(0);      // interlace = 0
     AppendChunk(png_data, "IHDR", ihdr);
 
-    // IDAT chunk（zlib 打包 1-bit 数据）
     std::string idat = ZlibStore(raw);
     AppendChunk(png_data, "IDAT", idat);
-
-    // IEND chunk
     AppendChunk(png_data, "IEND", "");
-
     return true;
 #else
     ESP_LOGE(TAG, "LV_USE_SNAPSHOT is not enabled");

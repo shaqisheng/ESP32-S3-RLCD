@@ -46,6 +46,10 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
 
+    // 调试：暴露 1-bit 显示缓冲区（供截图等使用）
+    const uint8_t* disp_buffer() const { return DispBuffer; }
+    int disp_buffer_len() const { return DisplayLen; }
+
     // 获取 SPI IO 句柄（LVGL 初始化可能需要）
     esp_lcd_panel_io_handle_t io_handle() const { return io_handle_; }
 
