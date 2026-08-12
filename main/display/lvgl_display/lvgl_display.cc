@@ -388,12 +388,10 @@ bool LvglDisplay::SnapshotToPng1bit(std::string& png_data, uint8_t threshold) {
         return false;
     }
 
-    // RGB565 数据（注意 byte order：lv_snapshot_take 是小端，swap 后恢复大端 RGB565）
+    // RGB565 像素数据：lv_snapshot_take 返回的 uint16_t 就是 RGB565 原值，
+    // ESP32 小端内存中直接用 (px >> 11) & 0x1f 等位运算提取即可。
+    // 不要 bswap16——那是 JPEG 编码器要求网络字节序才做的。
     uint16_t* pixels = reinterpret_cast<uint16_t*>(draw_buffer->data);
-    const size_t pixel_count = draw_buffer->data_size / 2;
-    for (size_t i = 0; i < pixel_count; ++i) {
-        pixels[i] = __builtin_bswap16(pixels[i]);
-    }
 
     // 转成 1-bit 行数据（每行前面加 filter type 0）
     const int row_bytes = (width + 7) / 8;
