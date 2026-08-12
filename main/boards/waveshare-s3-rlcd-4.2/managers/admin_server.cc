@@ -102,8 +102,8 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><h2>运行状态</h2><div id="runStatus" class="status">读取状态…</div></section>
 </div>
 <div class="tab-pane" data-pane="accounts">
-<div style="margin-bottom:14px"><b style="font-size:14px">设备页面编排</b><div class="hint">额度每屏固定 4 项，停留时每 10 秒翻页</div></div>
-<div class="toolbar"><h2 style="border:0;margin:0">ACCOUNT MANAGEMENT <span id="count" class="badge">0 / 32</span></h2><div><button id="refreshBtn">立即刷新</button> <button id="reloadBtn">放弃修改</button> <button id="addBtn">＋ 添加账号</button></div></div><div id="quotas"></div><button class="primary" id="saveQuotas">保存全部更改</button>
+<div class="toolbar"><div><b style="font-size:14px">设备页面编排</b> <span class="hint">额度每屏固定 4 项，停留时每 10 秒翻页</span></div><button id="refreshBtn">立即刷新</button></div>
+<div class="toolbar"><h2 style="border:0;margin:0">ACCOUNT MANAGEMENT <span id="count" class="badge">0 / 32</span></h2><div><button id="reloadBtn">放弃修改</button> <button id="addBtn">＋ 添加账号</button></div></div><div id="quotas"></div><button class="primary" id="saveQuotas">保存全部更改</button>
 <section class="panel" style="margin-top:14px"><h2>AI 自动刷新</h2><div class="field"><label>刷新间隔（分钟）<input id="quotaRefreshMinutes" type="number" min="1" max="60" step="1"></label></div><div class="toolbar" style="justify-content:flex-start"><button onclick="saveQuotaRefreshInterval()">保存刷新间隔</button></div><p class="hint">默认 5 分钟，可设置 1–60 分钟 · 后台端口 8080 · 凭据只写不回显</p></section>
 <section class="panel"><h2>代理连通性诊断</h2><p class="hint">使用已保存的第一项启用代理，按真实额度查询路径检查 TCP、HTTP CONNECT 和 TLS；诊断不会回显代理凭据。</p><button onclick="proxyDiagnostic()">检查代理连通性</button><pre id="proxyDiagnostic" class="status">尚未检查</pre></section>
 </div>
