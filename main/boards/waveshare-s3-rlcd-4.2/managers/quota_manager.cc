@@ -527,7 +527,7 @@ void QuotaManager::RefreshAll() {
 
 void QuotaManager::Load() {
     std::lock_guard<std::mutex> lock(mutex_);
-    pages_ = {{"overview", true, 0}, {"calendar", true, 1}, {"forecast", true, 2}, {"quota", true, 3}};
+    pages_ = {{"overview", true, 0}, {"calendar", true, 1}, {"forecast", true, 2}, {"quota", true, 3}, {"todo", true, 4}};
     nvs_handle_t handle;
     if (nvs_open_from_partition(kPartition, kNamespace, NVS_READONLY, &handle) != ESP_OK) return;
     uint32_t count = 0;
@@ -569,9 +569,14 @@ void QuotaManager::Load() {
                     loaded.push_back({JsonString(item, "id"), JsonBool(item, "enabled", true),
                                       static_cast<int>(JsonNumber(item, "order"))});
                 }
-                bool current_schema = loaded.size() == 4;
+                bool current_schema = loaded.size() == 4 || loaded.size() == 5;
                 for (const auto& page : loaded) {
-                    if (page.id != "overview" && page.id != "calendar" && page.id != "forecast" && page.id != "quota") current_schema = false;
+                    if (page.id != "overview" && page.id != "calendar" && page.id != "forecast" &&
+                        page.id != "quota" && page.id != "todo") current_schema = false;
+                }
+                // 自动迁移：旧版 4 页 NVS 数据补上 todo
+                if (current_schema && loaded.size() == 4) {
+                    loaded.push_back({"todo", true, 4});
                 }
                 if (current_schema) pages_ = loaded;
             }
@@ -804,10 +809,10 @@ std::string QuotaManager::GetPageConfigJson() const {
 
 bool QuotaManager::ApplyPageConfigJson(const char* json, std::string& error) {
     cJSON* root = cJSON_Parse(json); cJSON* array = root ? cJSON_GetObjectItem(root, "pages") : nullptr;
-    if (!cJSON_IsArray(array) || cJSON_GetArraySize(array) != 4) { if (root) cJSON_Delete(root); error = "页面配置必须包含 4 项"; return false; }
+    if (!cJSON_IsArray(array) || cJSON_GetArraySize(array) != 5) { if (root) cJSON_Delete(root); error = "页面配置必须包含 5 项"; return false; }
     std::vector<QuotaPageSetting> next; bool any = false; cJSON* item = nullptr; int order = 0;
     cJSON_ArrayForEach(item, array) { std::string id = JsonString(item, "id");
-        if (id != "overview" && id != "calendar" && id != "forecast" && id != "quota") { cJSON_Delete(root); error = "未知页面"; return false; }
+        if (id != "overview" && id != "calendar" && id != "forecast" && id != "quota" && id != "todo") { cJSON_Delete(root); error = "未知页面"; return false; }
         bool enabled = JsonBool(item, "enabled", true); any |= enabled; next.push_back({id, enabled, order++}); }
     cJSON_Delete(root); if (!any) { error = "至少启用一个页面"; return false; }
     std::lock_guard<std::mutex> lock(mutex_); pages_ = std::move(next);
