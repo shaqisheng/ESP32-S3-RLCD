@@ -36,7 +36,8 @@ int RemainingPercent(const QuotaTier& tier) {
     return std::clamp(100 - tier.used_percent, 0, 100);
 }
 
-void FormatReset(int64_t reset_at, char* out, size_t size) {
+// 重置倒计时："3天2小时后" / "5小时30分钟后" / "即将重置"。
+void FormatResetCountdown(int64_t reset_at, char* out, size_t size) {
     if (reset_at <= 0) {
         out[0] = '\0';
         return;
@@ -47,17 +48,55 @@ void FormatReset(int64_t reset_at, char* out, size_t size) {
     } else if (seconds >= 86400) {
         const int days = static_cast<int>(seconds / 86400);
         const int hours = static_cast<int>((seconds % 86400) / 3600);
-        if (hours > 0) snprintf(out, size, "%d天%d小时后重置", days, hours);
-        else snprintf(out, size, "%d天后重置", days);
+        if (hours > 0) snprintf(out, size, "%d天%d小时后", days, hours);
+        else snprintf(out, size, "%d天后", days);
     } else if (seconds >= 3600) {
         const int hours = static_cast<int>(seconds / 3600);
         const int minutes = static_cast<int>((seconds % 3600) / 60);
-        if (minutes > 0) snprintf(out, size, "%d小时%d分钟后重置", hours, minutes);
-        else snprintf(out, size, "%d小时后重置", hours);
+        if (minutes > 0) snprintf(out, size, "%d小时%d分钟后", hours, minutes);
+        else snprintf(out, size, "%d小时后", hours);
     } else {
-        snprintf(out, size, "%d分钟后重置",
+        snprintf(out, size, "%d分钟后",
                  static_cast<int>(std::max<int64_t>(1, seconds / 60)));
     }
+}
+
+// 重置绝对时间："15日15时"（同月内）或 "9月2日15时"（跨月）。
+void FormatResetAbsolute(int64_t reset_at, char* out, size_t size) {
+    if (reset_at <= 0) {
+        out[0] = '\0';
+        return;
+    }
+    time_t t = static_cast<time_t>(reset_at);
+    struct tm info;
+    localtime_r(&t, &info);
+    time_t now_t = time(nullptr);
+    struct tm now_info;
+    localtime_r(&now_t, &now_info);
+    if (info.tm_mon == now_info.tm_mon) {
+        snprintf(out, size, "%d日%d时", info.tm_mday, info.tm_hour);
+    } else {
+        snprintf(out, size, "%d月%d日%d时", info.tm_mon + 1, info.tm_mday, info.tm_hour);
+    }
+}
+
+// 找 5 小时短窗口 tier（label == "5H"）。没有返回 SIZE_MAX。
+size_t FindShortTier(const QuotaCard& card) {
+    for (size_t i = 0; i < card.tiers.size(); ++i) {
+        if (card.tiers[i].label == "5H") return i;
+    }
+    return SIZE_MAX;
+}
+
+// 找长窗口 tier（优先 "周" / "7D"，否则第一个非 5H）。总是返回有效索引。
+size_t FindLongTier(const QuotaCard& card) {
+    for (size_t i = 0; i < card.tiers.size(); ++i) {
+        if (card.tiers[i].label == "周" || card.tiers[i].label == "7D") return i;
+    }
+    for (size_t i = 0; i < card.tiers.size(); ++i) {
+        if (card.tiers[i].label != "5H") return i;
+    }
+    return 0;
 }
 
 const lv_image_dsc_t* ProviderLogo(const std::string& provider) {
@@ -75,16 +114,10 @@ const char* ProviderFallback(const std::string& provider) {
 }
 
 size_t PrimaryTier(const QuotaCard& card) {
-    size_t selected = 0;
-    int lowest_remaining = 101;
-    for (size_t i = 0; i < card.tiers.size(); ++i) {
-        int remaining = RemainingPercent(card.tiers[i]);
-        if (remaining >= 0 && remaining < lowest_remaining) {
-            selected = i;
-            lowest_remaining = remaining;
-        }
-    }
-    return selected;
+    // 主显 tier = 5H 优先（用户能感知紧迫），无 5H 则用长窗口。
+    const size_t short_idx = FindShortTier(card);
+    if (short_idx != SIZE_MAX) return short_idx;
+    return FindLongTier(card);
 }
 }  // namespace
 
@@ -313,37 +346,46 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
         }
 
         const size_t primary_index = PrimaryTier(card);
+        const size_t weekly_index = FindLongTier(card);
         const auto& primary = card.tiers[primary_index];
-        const int remaining = RemainingPercent(primary);
-        if (remaining >= 0) {
-            snprintf(text, sizeof(text), "%d%%", remaining);
+        const auto& weekly = card.tiers[weekly_index];
+        const int primary_remaining = RemainingPercent(primary);
+        const int weekly_remaining = RemainingPercent(weekly);
+
+        // 大数字：5H 优先（primary），无 5H 则周额度。
+        if (primary_remaining >= 0) {
+            snprintf(text, sizeof(text), "%d%%", primary_remaining);
             lv_label_set_text(quota_bars_[slot][1], text);
             snprintf(text, sizeof(text), "%s 剩余", primary.label.c_str());
             lv_label_set_text(quota_tier_labels_[slot][0], text);
-            lv_obj_remove_flag(quota_bars_[slot][0], LV_OBJ_FLAG_HIDDEN);
-            lv_bar_set_value(quota_bars_[slot][0], remaining, LV_ANIM_OFF);
         } else {
             snprintf(text, sizeof(text), "%.0f", primary.remaining);
             lv_label_set_text(quota_bars_[slot][1], text);
             snprintf(text, sizeof(text), "%s 剩余 %s", primary.label.c_str(), primary.unit.c_str());
             lv_label_set_text(quota_tier_labels_[slot][0], text);
+        }
+
+        // 进度条：固定显示周额度。
+        if (weekly_remaining >= 0) {
+            lv_obj_remove_flag(quota_bars_[slot][0], LV_OBJ_FLAG_HIDDEN);
+            lv_bar_set_value(quota_bars_[slot][0], weekly_remaining, LV_ANIM_OFF);
+        } else {
             lv_obj_add_flag(quota_bars_[slot][0], LV_OBJ_FLAG_HIDDEN);
         }
 
-        char reset[64];
-        FormatReset(primary.reset_at, reset, sizeof(reset));
-        if (card.tiers.size() > 1) {
-            const size_t other_index = primary_index == 0 ? 1 : 0;
-            const auto& other = card.tiers[other_index];
-            const int other_remaining = RemainingPercent(other);
-            if (other_remaining >= 0) {
-                snprintf(text, sizeof(text), "%s %d%% · %s", other.label.c_str(),
-                         other_remaining, reset);
+        // 进度条下方：周额度剩余% + 重置时间(日时) + 倒计时。
+        char when[32], countdown[32];
+        FormatResetAbsolute(weekly.reset_at, when, sizeof(when));
+        FormatResetCountdown(weekly.reset_at, countdown, sizeof(countdown));
+        if (weekly_remaining >= 0) {
+            if (when[0] && countdown[0]) {
+                snprintf(text, sizeof(text), "%s %d%% · %s · %s",
+                         weekly.label.c_str(), weekly_remaining, when, countdown);
             } else {
-                snprintf(text, sizeof(text), "%s", reset);
+                snprintf(text, sizeof(text), "%s %d%%", weekly.label.c_str(), weekly_remaining);
             }
         } else {
-            snprintf(text, sizeof(text), "%s", reset);
+            snprintf(text, sizeof(text), "%s", primary.label.c_str());
         }
         lv_label_set_text(quota_tier_labels_[slot][1], text);
     }

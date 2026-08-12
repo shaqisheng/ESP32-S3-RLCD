@@ -474,6 +474,30 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn("const lv_color_t foreground = lv_color_black()", source)
         self.assertIn("const lv_color_t background = lv_color_white()", source)
 
+    def test_quota_card_layout_separates_primary_and_weekly_tiers(self):
+        """AI 卡片三层信息按用户需求拆分：
+        - 大数字：5H 优先（PrimaryTier 用 FindShortTier），无 5H 则周额度
+        - 进度条：固定周额度（FindLongTier）
+        - 进度条下方：周剩余% + 重置时间(xx日xx时) + 倒计时
+        回归：曾把"剩余最少的"tier 同时用于大数字和进度条。"""
+        source = (BOARD / "quota_ui.cc").read_text()
+        # 必须有 5H / 周期 切分的辅助函数
+        self.assertIn("FindShortTier", source)
+        self.assertIn("FindLongTier", source)
+        # PrimaryTier 必须基于 5H 优先
+        self.assertIn("FindShortTier(card)", source)
+        # 重置时间格式化必须分开 absolute（"日时"）和 countdown（"天后"）
+        self.assertIn("FormatResetAbsolute", source)
+        self.assertIn("FormatResetCountdown", source)
+        # 进度条下方的组合文本必须有这三段
+        self.assertIn("weekly.label.c_str()", source)
+        self.assertIn("when", source)
+        self.assertIn("countdown", source)
+        # 不允许出现旧的 "重置" 后缀（已改为"后"）
+        self.assertNotIn("%d天%d小时后重置", source)
+        # 不允许旧的 other_index 双 tier 切换逻辑
+        self.assertNotIn("other_index", source)
+
     def test_quota_refresh_interval_is_configurable_and_defaults_to_five_minutes(self):
         quota = (BOARD / "managers/quota_manager.cc").read_text()
         header = (BOARD / "managers/quota_manager.h").read_text()

@@ -6,6 +6,32 @@
 
 ---
 
+## 2026-08-12 — AI 卡片信息分层重构（5H/周额度拆开显示）
+
+- **修改内容**：`quota_ui.cc` 匿名 namespace 新增 3 个 helper，重写 `RenderQuotaPageInternal` 主体：
+  - 新增 `FindShortTier(card)`：找 `label == "5H"`，无则返 `SIZE_MAX`
+  - 新增 `FindLongTier(card)`：优先 `label == "周" || "7D"`，否则首个非 5H，保证返回有效索引
+  - 新增 `FormatResetAbsolute(reset_at, out, size)`：同月 `"15日15时"`，跨月 `"9月2日15时"`（`localtime_r` 取 `tm_mday/tm_hour`）
+  - 重构 `FormatReset` → `FormatResetCountdown`（去掉 `"重置"` 后缀，输出 `"3天2小时后"`）
+  - `PrimaryTier` 改为"5H 优先（FindShortTier），无则 FindLongTier"——之前是"剩余%最低"
+  - render 主体改为三段：
+    - 大数字 = `primary.remaining` %（5H 优先，无则周）
+    - 进度条 = `weekly.remaining` %（固定周/7D）
+    - 进度条下方 = `"周 N% · 15日15时 · 3天2小时后"`（周剩余% + 重置绝对时间 + 倒计时）
+  - 新增 `test_quota_card_layout_separates_primary_and_weekly_tiers` 契约测试
+- **修改原因**：用户明确要求三层信息拆分：(1) 主数显 5H 优先（5H 是用户能感知紧迫的指标），无 5H 才周；(2) 进度条固定显示周额度（长周期趋势）；(3) 进度条下方用周额度的剩余%、绝对重置时间、倒计时三段。原代码三个 UI 元素（大数字/进度条/下方文字）都跟着同一个 PrimaryTier（最低剩余%）走，信息冗余且不区分 5H 与周。
+- **影响范围**：只动 `quota_ui.cc` 渲染层 + 测试；不影响 quota_manager 解析、API、NVS、其他页面。Codex（5H+7D）、Kimi（5H+周）、GLM（5H+周）都按预期分层；DeepSeek（只有余额）走 fallback：primary=weekly=同一 tier，bar 隐藏，下方显示 `"余额"` label。
+- **测试结果**：
+  - Python 契约测试: ✅ 46 个全过（新增 1 个）
+  - `git diff --check`: ✅
+  - idf.py build: ✅ 增量
+  - 真机烧录: ✅ 设备在线（HTTP 200）
+  - AI 页面实际显示: ⏳ 由用户实测（需触发一次刷新有数据）
+- **回滚方式**：`git revert`；或恢复 `PrimaryTier` 的"最低剩余%"逻辑 + `FormatReset` 旧名
+- **关联文档**：与 [[2026-08-12-统一4张AI卡片背景为白色]] 同属 AI 页面视觉/信息层重构
+
+---
+
 ## 2026-08-12 — 统一 4 张 AI 卡片背景为白色（去掉上下排交替）
 
 - **修改内容**：`quota_ui.cc` 的 `SetupQuotaUI()` for 循环里：
