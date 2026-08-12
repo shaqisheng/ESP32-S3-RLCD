@@ -46,20 +46,20 @@ void CustomLcdDisplay::SetupCalendarUI() {
     lv_label_set_text(calendar_year_label_, "----年");
 
     calendar_month_label_ = lv_label_create(calendar_page_);
-    lv_obj_set_pos(calendar_month_label_, 166, 19);
+    lv_obj_set_pos(calendar_month_label_, 316, 6);
     lv_obj_set_size(calendar_month_label_, 72, 30);
     lv_obj_set_style_text_font(calendar_month_label_, &alibaba_puhui_24, 0);
     lv_obj_set_style_text_color(calendar_month_label_, lv_color_black(), 0);
+    lv_obj_set_style_text_align(calendar_month_label_, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_long_mode(calendar_month_label_, LV_LABEL_LONG_CLIP);
     lv_label_set_text(calendar_month_label_, "--月");
 
     calendar_subtitle_label_ = lv_label_create(calendar_page_);
-    lv_obj_set_pos(calendar_subtitle_label_, 238, 10);
-    lv_obj_set_size(calendar_subtitle_label_, 152, 42);
+    lv_obj_set_pos(calendar_subtitle_label_, 236, 38);
+    lv_obj_set_size(calendar_subtitle_label_, 152, 20);
     lv_obj_set_style_text_font(calendar_subtitle_label_, &font_puhui_16_4, 0);
     lv_obj_set_style_text_color(calendar_subtitle_label_, lv_color_black(), 0);
     lv_obj_set_style_text_align(calendar_subtitle_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_line_space(calendar_subtitle_label_, 2, 0);
     lv_label_set_text(calendar_subtitle_label_, "农历 · 等待同步");
 
     lv_obj_t* weekday_bar = lv_obj_create(calendar_page_);
@@ -116,8 +116,8 @@ void CustomLcdDisplay::UpdateCalendarInternal(const struct tm& now) {
     lv_label_set_text(calendar_month_label_, month_title);
 
     char subtitle[96];
-    snprintf(subtitle, sizeof(subtitle), "农历 %s\n今天 %d日",
-             CalendarManager::LunarFullText(year, month, now.tm_mday).c_str(), now.tm_mday);
+    snprintf(subtitle, sizeof(subtitle), "农历 %s",
+             CalendarManager::LunarFullText(year, month, now.tm_mday).c_str());
     lv_label_set_text(calendar_subtitle_label_, subtitle);
 
     struct tm first = now;
