@@ -495,6 +495,11 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn("countdown", source)
         # 不允许出现旧的 "重置" 后缀（已改为"后"）
         self.assertNotIn("%d天%d小时后重置", source)
+        # 倒计时必须用紧凑缩写（d/h/m），不允许中文天/小时/分钟
+        self.assertIn("%dd%dh", source)
+        self.assertIn("%dh%dm", source)
+        self.assertNotIn("%d天", source)
+        self.assertNotIn("%d小时", source)
         # 不允许旧的 other_index 双 tier 切换逻辑
         self.assertNotIn("other_index", source)
 

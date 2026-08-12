@@ -36,7 +36,7 @@ int RemainingPercent(const QuotaTier& tier) {
     return std::clamp(100 - tier.used_percent, 0, 100);
 }
 
-// 重置倒计时："3天2小时后" / "5小时30分钟后" / "即将重置"。
+// 重置倒计时："3d2h" / "5h30m" / "即将"。用紧凑缩写避免下方文字超宽被截断。
 void FormatResetCountdown(int64_t reset_at, char* out, size_t size) {
     if (reset_at <= 0) {
         out[0] = '\0';
@@ -44,19 +44,19 @@ void FormatResetCountdown(int64_t reset_at, char* out, size_t size) {
     }
     int64_t seconds = reset_at - time(nullptr);
     if (seconds <= 0) {
-        snprintf(out, size, "即将重置");
+        snprintf(out, size, "即将");
     } else if (seconds >= 86400) {
         const int days = static_cast<int>(seconds / 86400);
         const int hours = static_cast<int>((seconds % 86400) / 3600);
-        if (hours > 0) snprintf(out, size, "%d天%d小时后", days, hours);
-        else snprintf(out, size, "%d天后", days);
+        if (hours > 0) snprintf(out, size, "%dd%dh", days, hours);
+        else snprintf(out, size, "%dd", days);
     } else if (seconds >= 3600) {
         const int hours = static_cast<int>(seconds / 3600);
         const int minutes = static_cast<int>((seconds % 3600) / 60);
-        if (minutes > 0) snprintf(out, size, "%d小时%d分钟后", hours, minutes);
-        else snprintf(out, size, "%d小时后", hours);
+        if (minutes > 0) snprintf(out, size, "%dh%dm", hours, minutes);
+        else snprintf(out, size, "%dh", hours);
     } else {
-        snprintf(out, size, "%d分钟后",
+        snprintf(out, size, "%dm",
                  static_cast<int>(std::max<int64_t>(1, seconds / 60)));
     }
 }
