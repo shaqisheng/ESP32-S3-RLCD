@@ -116,7 +116,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><div class="toolbar"><h2 style="border:0;margin:0">待办事项 <span id="todoCount" class="badge">0</span></h2><button onclick="openTodoModal()">＋ 新增待办</button></div><div id="todos"></div></section>
 </div>
 <div class="tab-pane" data-pane="integ">
-<section class="panel"><h2>城市天气</h2><p class="hint">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>高德城市 adcode（必填）<input id="amap_adcode" autocomplete="off" placeholder="例如 320500"></label></div><div class="field"><label>高德 Web 服务 Key<input id="amapWebKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearAmapKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存高德 Key</label><p id="weatherKeyState" class="hint">高德 Key 不会回显</p><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="refreshWeather(this)">立即刷新天气</button><button onclick="weatherDiagnostic()">查看天气诊断</button></div><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
+<section class="panel"><h2>城市天气</h2><p class="hint">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。选择城市后自动匹配高德 adcode，无需手填。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>高德 Web 服务 Key<input id="amapWebKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearAmapKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存高德 Key</label><p id="weatherKeyState" class="hint">高德 Key 不会回显</p><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="refreshWeather(this)">立即刷新天气</button><button onclick="weatherDiagnostic()">查看天气诊断</button></div><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
@@ -141,35 +141,35 @@ var names={overview:"综合",calendar:"日历",forecast:"天气",quota:"AI",todo
 var providerNames={codex:"Codex",kimi:"Kimi","glm-cn":"GLM 国内","glm-global":"GLM 国际",deepseek:"DeepSeek","generic-json":"通用 JSON",manual:"手动额度"};
 var stateNames={ok:"正常",error:"失败",stale:"旧数据",pending:"等待刷新",disabled:"已停用"};
 var cityCatalog={
-"北京市":[["北京市",39.9042,116.4074]],"天津市":[["天津市",39.0842,117.2009]],"上海市":[["上海市",31.2304,121.4737]],"重庆市":[["重庆市",29.5630,106.5516]],
-"河北省":[["石家庄市",38.0428,114.5149],["唐山市",39.6305,118.1802],["秦皇岛市",39.9354,119.5996],["保定市",38.8739,115.4646],["张家口市",40.7675,114.8863]],
-"山西省":[["太原市",37.8706,112.5489],["大同市",40.0768,113.3001],["运城市",35.0263,111.0075]],
-"内蒙古自治区":[["呼和浩特市",40.8426,111.7492],["包头市",40.6574,109.8403],["鄂尔多斯市",39.6083,109.7813]],
-"辽宁省":[["沈阳市",41.8057,123.4315],["大连市",38.9140,121.6147],["鞍山市",41.1086,122.9956]],
-"吉林省":[["长春市",43.8171,125.3235],["吉林市",43.8379,126.5496],["延吉市",42.8913,129.5091]],
-"黑龙江省":[["哈尔滨市",45.8038,126.5340],["齐齐哈尔市",47.3543,123.9182],["牡丹江市",44.5517,129.6332]],
-"江苏省":[["南京市",32.0603,118.7969],["无锡市",31.4912,120.3119],["徐州市",34.2044,117.2858],["常州市",31.8107,119.9741],["苏州市",31.2989,120.5853],["南通市",31.9802,120.8943],["连云港市",34.5967,119.2216],["淮安市",33.6104,119.0153],["盐城市",33.3474,120.1636],["扬州市",32.3942,119.4129],["镇江市",32.1885,119.4250],["泰州市",32.4558,119.9231],["宿迁市",33.9630,118.2752]],
-"浙江省":[["杭州市",30.2741,120.1551],["宁波市",29.8683,121.5440],["温州市",27.9949,120.6994],["嘉兴市",30.7461,120.7555],["绍兴市",30.0303,120.5802],["金华市",29.0791,119.6474]],
-"安徽省":[["合肥市",31.8206,117.2272],["芜湖市",31.3525,118.4331],["黄山市",29.7147,118.3376]],
-"福建省":[["福州市",26.0745,119.2965],["厦门市",24.4798,118.0894],["泉州市",24.8741,118.6757]],
-"江西省":[["南昌市",28.6829,115.8582],["九江市",29.7051,116.0019],["赣州市",25.8311,114.9350]],
-"山东省":[["济南市",36.6512,117.1201],["青岛市",36.0671,120.3826],["烟台市",37.4638,121.4479],["潍坊市",36.7069,119.1618],["威海市",37.5131,122.1204],["临沂市",35.1047,118.3564]],
-"河南省":[["郑州市",34.7466,113.6254],["洛阳市",34.6197,112.4540],["开封市",34.7973,114.3073],["南阳市",32.9907,112.5283]],
-"湖北省":[["武汉市",30.5928,114.3055],["宜昌市",30.6919,111.2865],["襄阳市",32.0089,112.1224]],
-"湖南省":[["长沙市",28.2282,112.9388],["株洲市",27.8274,113.1340],["衡阳市",26.8932,112.5719],["张家界市",29.1171,110.4792]],
-"广东省":[["广州市",23.1291,113.2644],["深圳市",22.5431,114.0579],["珠海市",22.2707,113.5767],["佛山市",23.0215,113.1214],["东莞市",23.0207,113.7518],["惠州市",23.1115,114.4168],["汕头市",23.3541,116.6819]],
-"广西壮族自治区":[["南宁市",22.8170,108.3665],["桂林市",25.2736,110.2900],["柳州市",24.3264,109.4281],["北海市",21.4811,109.1202]],
-"海南省":[["海口市",20.0440,110.1983],["三亚市",18.2528,109.5120]],
-"四川省":[["成都市",30.5728,104.0668],["绵阳市",31.4675,104.6796],["乐山市",29.5521,103.7656],["宜宾市",28.7518,104.6432]],
-"贵州省":[["贵阳市",26.6470,106.6302],["遵义市",27.7257,106.9272],["安顺市",26.2531,105.9476]],
-"云南省":[["昆明市",25.0389,102.7183],["大理市",25.6065,100.2676],["丽江市",26.8721,100.2299],["西双版纳州",22.0075,100.7979]],
-"西藏自治区":[["拉萨市",29.6520,91.1721],["日喀则市",29.2675,88.8811]],
-"陕西省":[["西安市",34.3416,108.9398],["宝鸡市",34.3619,107.2373],["延安市",36.5853,109.4898]],
-"甘肃省":[["兰州市",36.0611,103.8343],["天水市",34.5809,105.7249],["敦煌市",40.1421,94.6618]],
-"青海省":[["西宁市",36.6171,101.7782],["格尔木市",36.4064,94.9285]],
-"宁夏回族自治区":[["银川市",38.4872,106.2309],["中卫市",37.5003,105.1968]],
-"新疆维吾尔自治区":[["乌鲁木齐市",43.8256,87.6168],["喀什市",39.4704,75.9898],["伊宁市",43.9095,81.2770],["克拉玛依市",45.5799,84.8892]],
-"香港特别行政区":[["香港",22.3193,114.1694]],"澳门特别行政区":[["澳门",22.1987,113.5439]],"台湾省":[["台北市",25.0330,121.5654],["高雄市",22.6273,120.3014]]};
+"北京市":[["北京市",39.9042,116.4074,"110000"]],"天津市":[["天津市",39.0842,117.2009,"120000"]],"上海市":[["上海市",31.2304,121.4737,"310000"]],"重庆市":[["重庆市",29.5630,106.5516,"500000"]],
+"河北省":[["石家庄市",38.0428,114.5149,"130100"],["唐山市",39.6305,118.1802,"130200"],["秦皇岛市",39.9354,119.5996,"130300"],["保定市",38.8739,115.4646,"130600"],["张家口市",40.7675,114.8863,"130700"]],
+"山西省":[["太原市",37.8706,112.5489,"140100"],["大同市",40.0768,113.3001,"140200"],["运城市",35.0263,111.0075,"140800"]],
+"内蒙古自治区":[["呼和浩特市",40.8426,111.7492,"150100"],["包头市",40.6574,109.8403,"150200"],["鄂尔多斯市",39.6083,109.7813,"150600"]],
+"辽宁省":[["沈阳市",41.8057,123.4315,"210100"],["大连市",38.9140,121.6147,"210200"],["鞍山市",41.1086,122.9956,"210300"]],
+"吉林省":[["长春市",43.8171,125.3235,"220100"],["吉林市",43.8379,126.5496,"220200"],["延吉市",42.8913,129.5091,"222401"]],
+"黑龙江省":[["哈尔滨市",45.8038,126.5340,"230100"],["齐齐哈尔市",47.3543,123.9182,"230200"],["牡丹江市",44.5517,129.6332,"231000"]],
+"江苏省":[["南京市",32.0603,118.7969,"320100"],["无锡市",31.4912,120.3119,"320200"],["徐州市",34.2044,117.2858,"320300"],["常州市",31.8107,119.9741,"320400"],["苏州市",31.2989,120.5853,"320500"],["南通市",31.9802,120.8943,"320600"],["连云港市",34.5967,119.2216,"320700"],["淮安市",33.6104,119.0153,"320800"],["盐城市",33.3474,120.1636,"320900"],["扬州市",32.3942,119.4129,"321000"],["镇江市",32.1885,119.4250,"321100"],["泰州市",32.4558,119.9231,"321200"],["宿迁市",33.9630,118.2752,"321300"]],
+"浙江省":[["杭州市",30.2741,120.1551,"330100"],["宁波市",29.8683,121.5440,"330200"],["温州市",27.9949,120.6994,"330300"],["嘉兴市",30.7461,120.7555,"330400"],["绍兴市",30.0303,120.5802,"330600"],["金华市",29.0791,119.6474,"330700"]],
+"安徽省":[["合肥市",31.8206,117.2272,"340100"],["芜湖市",31.3525,118.4331,"340200"],["黄山市",29.7147,118.3376,"341000"]],
+"福建省":[["福州市",26.0745,119.2965,"350100"],["厦门市",24.4798,118.0894,"350200"],["泉州市",24.8741,118.6757,"350500"]],
+"江西省":[["南昌市",28.6829,115.8582,"360100"],["九江市",29.7051,116.0019,"360400"],["赣州市",25.8311,114.9350,"360700"]],
+"山东省":[["济南市",36.6512,117.1201,"370100"],["青岛市",36.0671,120.3826,"370200"],["烟台市",37.4638,121.4479,"370600"],["潍坊市",36.7069,119.1618,"370700"],["威海市",37.5131,122.1204,"371000"],["临沂市",35.1047,118.3564,"371300"]],
+"河南省":[["郑州市",34.7466,113.6254,"410100"],["洛阳市",34.6197,112.4540,"410300"],["开封市",34.7973,114.3073,"410200"],["南阳市",32.9907,112.5283,"411300"]],
+"湖北省":[["武汉市",30.5928,114.3055,"420100"],["宜昌市",30.6919,111.2865,"420500"],["襄阳市",32.0089,112.1224,"420600"]],
+"湖南省":[["长沙市",28.2282,112.9388,"430100"],["株洲市",27.8274,113.1340,"430200"],["衡阳市",26.8932,112.5719,"430400"],["张家界市",29.1171,110.4792,"430800"]],
+"广东省":[["广州市",23.1291,113.2644,"440100"],["深圳市",22.5431,114.0579,"440300"],["珠海市",22.2707,113.5767,"440400"],["佛山市",23.0215,113.1214,"440600"],["东莞市",23.0207,113.7518,"441900"],["惠州市",23.1115,114.4168,"441300"],["汕头市",23.3541,116.6819,"440500"]],
+"广西壮族自治区":[["南宁市",22.8170,108.3665,"450100"],["桂林市",25.2736,110.2900,"450300"],["柳州市",24.3264,109.4281,"450200"],["北海市",21.4811,109.1202,"450500"]],
+"海南省":[["海口市",20.0440,110.1983,"460100"],["三亚市",18.2528,109.5120,"460200"]],
+"四川省":[["成都市",30.5728,104.0668,"510100"],["绵阳市",31.4675,104.6796,"510700"],["乐山市",29.5521,103.7656,"511100"],["宜宾市",28.7518,104.6432,"511500"]],
+"贵州省":[["贵阳市",26.6470,106.6302,"520100"],["遵义市",27.7257,106.9272,"520300"],["安顺市",26.2531,105.9476,"520400"]],
+"云南省":[["昆明市",25.0389,102.7183,"530100"],["大理市",25.6065,100.2676,"532901"],["丽江市",26.8721,100.2299,"530700"],["西双版纳州",22.0075,100.7979,"532800"]],
+"西藏自治区":[["拉萨市",29.6520,91.1721,"540100"],["日喀则市",29.2675,88.8811,"540200"]],
+"陕西省":[["西安市",34.3416,108.9398,"610100"],["宝鸡市",34.3619,107.2373,"610300"],["延安市",36.5853,109.4898,"610600"]],
+"甘肃省":[["兰州市",36.0611,103.8343,"620100"],["天水市",34.5809,105.7249,"620500"],["敦煌市",40.1421,94.6618,"620982"]],
+"青海省":[["西宁市",36.6171,101.7782,"630100"],["格尔木市",36.4064,94.9285,"632801"]],
+"宁夏回族自治区":[["银川市",38.4872,106.2309,"640100"],["中卫市",37.5003,105.1968,"640500"]],
+"新疆维吾尔自治区":[["乌鲁木齐市",43.8256,87.6168,"650100"],["喀什市",39.4704,75.9898,"653101"],["伊宁市",43.9095,81.2770,"654002"],["克拉玛依市",45.5799,84.8892,"650200"]],
+"香港特别行政区":[["香港",22.3193,114.1694,"810000"]],"澳门特别行政区":[["澳门",22.1987,113.5439,"820000"]],"台湾省":[["台北市",25.0330,121.5654,"710100"],["高雄市",22.6273,120.3014,"710200"]]};
 var providerMarks={codex:"C",kimi:"K","glm-cn":"G","glm-global":"G",deepseek:"D","generic-json":"JSON",manual:"M"};
 var providerLogos={
 codex:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAA+UlEQVR42u2ZyQ7DMAhEQ9T//2V6sBShUuh4UeSh8SEHbzLPY4yJqOqxUzmPzcqzoF/l1TtARJLWeUVuR0hwmzybNjZn1suPk5BlEPVfxYn5lHnLIlXlpNs36slDKNIEQiXSHHIqGQiNnReEqO/v6e5NyFuD0MpVZVuR2fhve/wkNk6IzuoSyu81r0hKP3TTgkTkAqOqF1pbz6khu+u4B89nIIuHzg9rvu6urV9VojnZNJT73DFV5V6b01PjPrf3pcZPyFscWT/2AmaLGCMqUUyDvNR6IwVmPzT/fq2Y/ZjXBJI5qZUfWht918ox3pOXrUjo+bXw5wt6AwzBsWurQCz9AAAAAElFTkSuQmCC",
@@ -191,7 +191,7 @@ function showDash(){el("auth").classList.add("hidden");el("dashboard").classList
 async function boot(){try{var s=await api("/api/status");if(s.setup_required){showAuth(true);return}if(!s.authenticated){showAuth(false);return}csrf=s.csrf||"";showDash();await loadAll()}catch(e){showAuth(false)}}
 async function login(){var p=el("password").value;if(p.length<8){toast("密码至少 8 位",true);return}try{var d=await api(setupMode?"/api/setup":"/api/login",{method:"POST",body:JSON.stringify({password:p})});csrf=d.csrf||"";el("password").value="";showDash();await loadAll()}catch(e){toast(e.message,true)}}
 async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages");items=q.items||[];items.forEach(keyFor);pages=p.pages||[];editingKey="";dirty=false;el("saveQuotas").textContent="保存全部更改";renderPages();renderDisplaySwitches();renderQuotas();await loadExtras();await status()}
-async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("amap_adcode").value=w.amap_adcode||"";el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice();await loadWifi()}
+async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice();await loadWifi()}
 function memStatus(bytes,isInternal){var b=Number(bytes||0);var label,danger=false;if(isInternal){if(b<20*1024){label="危险";danger=true}else if(b<30*1024){label="紧张";danger=true}else{label="正常"}}else{if(b<512*1024){label="危险";danger=true}else if(b<2*1024*1024){label="紧张";danger=true}else{label="充足"}}var num=b>=1024*1024?(b/1024/1024).toFixed(1)+" MB":(b/1024).toFixed(1)+" KB";return{txt:label+" "+num,danger:danger}}
 function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=el(elId);e.textContent=s.txt;e.style.color=s.danger?"var(--bad)":""}
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
@@ -226,7 +226,7 @@ async function toggleTodo(id,done){await api("/api/todos/"+id,{method:"PUT",body
 async function deleteTodo(id){if(!confirm("删除这条待办？"))return;await api("/api/todos/"+id,{method:"DELETE"});loadExtras()}
 function renderWeatherProvinces(selectedProvince,selectedCity){var provinces=Object.keys(cityCatalog);el("weatherProvince").innerHTML=provinces.map(function(p){return '<option value="'+esc(p)+'" '+(p===selectedProvince?'selected':'')+'>'+esc(p)+'</option>'}).join("");if(!cityCatalog[selectedProvince])selectedProvince=provinces[0];el("weatherProvince").value=selectedProvince;renderWeatherCities(selectedProvince,selectedCity)}
 function renderWeatherCities(province,selectedCity){var cities=cityCatalog[province]||[];el("weatherCity").innerHTML=cities.map(function(c,i){return '<option value="'+i+'" '+(c[0]===selectedCity?'selected':'')+'>'+esc(c[0])+'</option>'}).join("")}
-async function saveWeather(){var province=el("weatherProvince").value,cities=cityCatalog[province]||[],city=cities[Number(el("weatherCity").value)],adcode=el("amap_adcode").value.trim(),minutes=Number(el("weatherRefreshMinutes").value);if(!city){toast("请选择城市",true);return}if(!/^\d{6}$/.test(adcode)){toast("请填写 6 位高德城市 adcode",true);return}if(!Number.isInteger(minutes)||minutes<5||minutes>120){toast("天气刷新间隔必须为 5–120 分钟",true);return}var key=el("amapWebKey").value;await api("/api/weather",{method:"PUT",body:JSON.stringify({province:province,city:city[0],latitude:city[1],longitude:city[2],amap_adcode:adcode,amap_key:key,clear_amap_key:el("weatherClearAmapKey").checked,refresh_interval_minutes:minutes})});el("amapWebKey").value="";el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent="高德配置已保存（Key 不会回显）";toast("配置已保存，设备空闲后立即检测")}
+async function saveWeather(){var province=el("weatherProvince").value,cities=cityCatalog[province]||[],city=cities[Number(el("weatherCity").value)],minutes=Number(el("weatherRefreshMinutes").value);if(!city){toast("请选择城市",true);return}var adcode=city[3]||"";if(!/^\d{6}$/.test(adcode)){toast("所选城市暂无 adcode 数据",true);return}if(!Number.isInteger(minutes)||minutes<5||minutes>120){toast("天气刷新间隔必须为 5–120 分钟",true);return}var key=el("amapWebKey").value;await api("/api/weather",{method:"PUT",body:JSON.stringify({province:province,city:city[0],latitude:city[1],longitude:city[2],amap_adcode:adcode,amap_key:key,clear_amap_key:el("weatherClearAmapKey").checked,refresh_interval_minutes:minutes})});el("amapWebKey").value="";el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent="高德配置已保存（Key 不会回显）";toast("配置已保存，设备空闲后立即检测")}
 async function weatherDiagnostic(){var box=el("weatherDiagnostic");box.textContent="正在读取最近一次天气请求…";try{var d=await api("/api/weather-diagnostic");box.textContent="接口："+(d.endpoint||"未请求")+"\nHTTP："+(d.http_status||"未请求")+"\n结果："+(d.result||"无返回");box.className="status "+(d.ok?"ok":"bad")}catch(e){box.textContent="诊断失败："+e.message;box.className="status bad"}}
 async function refreshWeather(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{await api("/api/weather/refresh",{method:"POST"});btn.classList.add("success");btn.textContent="✓";toast("天气刷新请求已排队");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast(e.message,true)}}
 async function proxyDiagnostic(){var box=el("proxyDiagnostic");box.textContent="正在检查 TCP、CONNECT、TLS…";try{var d=await api("/api/proxy-diagnostic",{method:"POST"});box.textContent="端点："+(d.endpoint||"未配置")+"\n阶段："+(d.stage||"未知")+"\n结果："+(d.message||"无返回");box.className="status "+(d.tcp_connected?"ok":"bad")}catch(e){box.textContent="诊断失败："+e.message;box.className="status bad"}}
