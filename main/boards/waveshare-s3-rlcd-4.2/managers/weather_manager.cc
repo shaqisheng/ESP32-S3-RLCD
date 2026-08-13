@@ -123,6 +123,9 @@ std::string WeatherManager::getLocationConfigJson() const {
     cJSON_AddNumberToObject(root, "longitude", config.longitude);
     cJSON_AddBoolToObject(root, "has_amap_key", !config.amap_key.empty());
     cJSON_AddNumberToObject(root, "refresh_interval_minutes", config.refresh_interval_minutes);
+    cJSON_AddBoolToObject(root, "refreshing", is_refreshing_.load());
+    cJSON_AddNumberToObject(root, "last_refresh_completed_at",
+                            static_cast<double>(last_completed_at_.load()));
     char* raw = cJSON_PrintUnformatted(root);
     std::string output = raw ? raw : "{}";
     if (raw) cJSON_free(raw);
@@ -216,6 +219,15 @@ bool WeatherManager::update() {
     if (network_session.cancelled()) return false;
     request_generation = network_session.generation();
     std::lock_guard<std::mutex> update_lock(update_mutex_);
+    is_refreshing_.store(true);
+    // RAII：函数返回时（无论哪条路径）清除 refreshing 并记录完成时间
+    struct RefreshGuard {
+        WeatherManager* self;
+        ~RefreshGuard() {
+            self->is_refreshing_.store(false);
+            self->last_completed_at_.store(time(nullptr));
+        }
+    } guard{this};
     const WeatherConfig config = config_.Get();
     if (!response_buffer || config.amap_key.empty() || config.amap_adcode.size() != 6) {
         const char* message = config.amap_key.empty() ? "未配置高德 Web 服务 Key" : "未配置高德城市 adcode";

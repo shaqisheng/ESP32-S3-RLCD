@@ -48,6 +48,10 @@ public:
     uint32_t GetRefreshIntervalMinutes() const;
     bool TakeRefreshRequest() { return refresh_requested_.exchange(false); }
     void RequestRefresh() { refresh_requested_ = true; }
+    // 刷新状态查询（供 UI 显示"正在刷新…"）
+    bool IsRefreshing() const { return is_refreshing_.load(); }
+    // 最近一次刷新完成时间（epoch 秒，不管成败）
+    int64_t GetLastCompletedAt() const { return last_completed_at_.load(); }
 
     // 通过外部工具（如 MCP）直接写入天气数据
     // 适用于不走板载 HTTP 天气接口，而由 AI 侧先查好天气再下发到设备
@@ -73,6 +77,8 @@ private:
     rlcd::ThreadSafeSnapshot<WeatherConfig> config_;
     mutable std::mutex update_mutex_;
     std::atomic<bool> refresh_requested_{true};
+    std::atomic<bool> is_refreshing_{false};
+    std::atomic<int64_t> last_completed_at_{0};
     int last_http_status_ = 0;
     std::string last_endpoint_ = "尚未请求";
     std::string last_result_ = "尚未请求";

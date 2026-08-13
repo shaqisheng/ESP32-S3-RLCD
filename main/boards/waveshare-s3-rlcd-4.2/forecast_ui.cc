@@ -194,8 +194,14 @@ void CustomLcdDisplay::UpdateWeatherDisplaysInternal() {
         lv_label_set_text_fmt(forecast_city_label_, "%s · 七日天气", data.city.c_str());
     }
     if (forecast_updated_label_) {
-        lv_label_set_text(forecast_updated_label_,
-                          data.update_time.empty() ? "刚刚更新" : data.update_time.c_str());
+        // BOOT 单击触发刷新时显示"正在刷新…"；完成后回到时间文本
+        auto& wm = WeatherManager::getInstance();
+        if (wm.IsRefreshing()) {
+            lv_label_set_text(forecast_updated_label_, "正在刷新…");
+        } else {
+            lv_label_set_text(forecast_updated_label_,
+                              data.update_time.empty() ? "刚刚更新" : data.update_time.c_str());
+        }
     }
     if (forecast_now_label_) lv_label_set_text_fmt(forecast_now_label_, "%s°", data.temp.c_str());
     if (forecast_now_icon_image_) {
