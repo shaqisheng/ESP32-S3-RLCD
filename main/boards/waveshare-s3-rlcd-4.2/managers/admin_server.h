@@ -65,4 +65,5 @@ private:
     static esp_err_t WeatherRefreshHandler(httpd_req_t* req);
     static esp_err_t WifiApStartHandler(httpd_req_t* req);
     static esp_err_t WifiApStopHandler(httpd_req_t* req);
+    static esp_err_t QuotaDisplayHandler(httpd_req_t* req);
 };

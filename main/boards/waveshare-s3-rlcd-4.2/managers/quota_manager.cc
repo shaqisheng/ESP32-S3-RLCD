@@ -269,6 +269,30 @@ bool QuotaManager::SetRefreshIntervalMinutes(uint32_t minutes, std::string& erro
     return true;
 }
 
+bool QuotaManager::SetDisplayConfig(uint8_t cards_per_page, uint8_t auto_advance_seconds,
+                                    uint8_t force_page, std::string& error) {
+    if (cards_per_page < 1 || cards_per_page > 4) { error = "每屏卡片数必须为 1-4"; return false; }
+    if (auto_advance_seconds > 120) { error = "自动翻页间隔不能超过 120 秒（0=不翻页）"; return false; }
+    if (force_page > 32) { error = "固定页码不能超过 32"; return false; }
+    std::lock_guard<std::mutex> lock(mutex_);
+    nvs_handle_t handle;
+    if (nvs_open_from_partition(kPartition, kNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+        error = "打开配置失败";
+        return false;
+    }
+    esp_err_t err = nvs_set_u8(handle, "cards_per_page", cards_per_page);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "auto_adv_sec", auto_advance_seconds);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "force_page", force_page);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    nvs_close(handle);
+    if (err != ESP_OK) { error = "保存显示配置失败"; return false; }
+    cards_per_page_ = cards_per_page;
+    auto_advance_seconds_ = auto_advance_seconds;
+    force_page_ = force_page;
+    revision_++;
+    return true;
+}
+
 bool QuotaManager::HttpGet(const Entry& entry, const std::string& url, std::string& body,
                            int& status, std::string& error) {
     auto* raw = static_cast<char*>(heap_caps_malloc(kMaxBody, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -589,6 +613,11 @@ void QuotaManager::Load() {
         saved_refresh_minutes >= kMinRefreshMinutes && saved_refresh_minutes <= kMaxRefreshMinutes) {
         refresh_interval_minutes_ = saved_refresh_minutes;
     }
+    // AI 页显示配置（缺省用字段默认值，有 NVS 则覆盖）
+    uint8_t v = 0;
+    if (nvs_get_u8(handle, "cards_per_page", &v) == ESP_OK && v >= 1 && v <= 4) cards_per_page_ = v;
+    if (nvs_get_u8(handle, "auto_adv_sec", &v) == ESP_OK && v <= 120) auto_advance_seconds_ = v;
+    if (nvs_get_u8(handle, "force_page", &v) == ESP_OK && v <= 32) force_page_ = v;
     nvs_close(handle);
     std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) { return a.order < b.order; });
     for (const auto& e : entries_) cards_.push_back({e.id, e.name.empty() ? ProviderLabel(e.provider) : e.name,
@@ -718,6 +747,10 @@ std::string QuotaManager::GetConfigJson() const {
         }
         cJSON_AddItemToArray(array, item);
     }
+    // AI 页显示配置（不影响既有前端 items 解析）
+    cJSON_AddNumberToObject(root, "cards_per_page", cards_per_page_);
+    cJSON_AddNumberToObject(root, "auto_advance_seconds", auto_advance_seconds_);
+    cJSON_AddNumberToObject(root, "force_page", force_page_);
     char* json = cJSON_PrintUnformatted(root); std::string out = json ? json : "{\"items\":[]}";
     if (json) cJSON_free(json);
     cJSON_Delete(root);

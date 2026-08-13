@@ -53,6 +53,13 @@ public:
     uint32_t GetRefreshIntervalMinutes() const;
     bool SetRefreshIntervalMinutes(uint32_t minutes, std::string& error);
 
+    // AI 页显示配置
+    uint8_t GetCardsPerPage() const { return cards_per_page_; }
+    uint8_t GetAutoAdvanceSeconds() const { return auto_advance_seconds_; }
+    uint8_t GetForcePage() const { return force_page_; }
+    bool SetDisplayConfig(uint8_t cards_per_page, uint8_t auto_advance_seconds,
+                          uint8_t force_page, std::string& error);
+
     // Returned JSON never includes stored credentials.
     std::string GetConfigJson() const;
     std::string GetProxyDiagnosticJson() const;
@@ -91,6 +98,10 @@ private:
     TaskHandle_t task_ = nullptr;
     int64_t last_all_success_at_ = 0;
     uint32_t refresh_interval_minutes_ = 5;
+    // AI 页显示配置（NVS quota namespace 持久化）
+    uint8_t cards_per_page_ = 4;          // 1-4，每屏几张卡片
+    uint8_t auto_advance_seconds_ = 10;   // 0=不翻页，否则 N 秒后自动切下一页
+    uint8_t force_page_ = 0;              // 0=自动翻页，1-N=固定显示第 N 页
     bool initialized_ = false;
 
     QuotaManager() = default;

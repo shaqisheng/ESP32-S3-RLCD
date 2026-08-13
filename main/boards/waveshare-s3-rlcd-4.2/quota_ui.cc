@@ -244,7 +244,8 @@ void CustomLcdDisplay::SetupQuotaUI() {
 void CustomLcdDisplay::RenderQuotaPageInternal() {
     auto& manager = QuotaManager::GetInstance();
     auto cards = manager.GetCards();
-    const size_t pages = std::max<size_t>(1, (cards.size() + 3) / 4);
+    const size_t per_page_calc = QuotaManager::GetInstance().GetCardsPerPage();
+    const size_t pages = std::max<size_t>(1, (cards.size() + per_page_calc - 1) / per_page_calc);
     if (quota_subpage_ >= pages) quota_subpage_ = 0;
 
     char text[128];
@@ -275,8 +276,10 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
     if (empty) lv_obj_remove_flag(quota_empty_label_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(quota_empty_label_, LV_OBJ_FLAG_HIDDEN);
 
-    const size_t page_start = quota_subpage_ * 4;
-    const size_t visible_count = empty ? 0 : std::min<size_t>(4, cards.size() - page_start);
+    auto& qm = QuotaManager::GetInstance();
+    const size_t per_page = qm.GetCardsPerPage();  // 1-4
+    const size_t page_start = quota_subpage_ * per_page;
+    const size_t visible_count = empty ? 0 : std::min<size_t>(per_page, cards.size() - page_start);
     for (size_t slot = 0; slot < visible_count; ++slot) {
         int x = 6, y = 54, width = 388, height = 240;
         if (visible_count == 2) {

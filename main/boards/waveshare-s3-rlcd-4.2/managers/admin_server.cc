@@ -111,6 +111,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <div class="toolbar"><div><b style="font-size:14px">设备页面编排</b> <span class="hint">额度每屏固定 4 项，停留时每 10 秒翻页</span></div><button id="refreshBtn">立即刷新</button></div>
 <div class="toolbar"><h2 style="border:0;margin:0">ACCOUNT MANAGEMENT <span id="count" class="badge">0 / 32</span></h2><div><button id="reloadBtn">放弃修改</button> <button id="addBtn">＋ 添加账号</button></div></div><div id="quotas"></div><button class="primary" id="saveQuotas">保存全部更改</button>
 <section class="panel" style="margin-top:14px"><h2>AI 自动刷新</h2><div class="field"><label>刷新间隔（分钟）<input id="quotaRefreshMinutes" type="number" min="1" max="60" step="1"></label></div><div class="toolbar" style="justify-content:flex-start"><button onclick="saveQuotaRefreshInterval()">保存刷新间隔</button></div><p class="hint">默认 5 分钟，可设置 1–60 分钟 · 后台端口 8080 · 凭据只写不回显</p></section>
+<section class="panel"><h2>AI 页显示</h2><div class="manage-grid" style="grid-template-columns:repeat(3,1fr)"><div class="field"><label>每屏卡片数（1-4）<input id="quotaCardsPerPage" type="number" min="1" max="4" step="1"></label></div><div class="field"><label>自动翻页（秒，0=不翻）<input id="quotaAutoAdvance" type="number" min="0" max="120" step="1"></label></div><div class="field"><label>固定页码（0=自动）<input id="quotaForcePage" type="number" min="0" max="32" step="1"></label></div></div><div class="toolbar" style="justify-content:flex-start"><button onclick="saveQuotaDisplay()">保存显示配置</button></div><p class="hint">每屏卡片数超过账号数时按实际数量布局。固定页码优先于自动翻页。</p></section>
 <section class="panel"><h2>代理连通性诊断</h2><p class="hint">使用已保存的第一项启用代理，按真实额度查询路径检查 TCP、HTTP CONNECT 和 TLS；诊断不会回显代理凭据。</p><button onclick="proxyDiagnostic()">检查代理连通性</button><pre id="proxyDiagnostic" class="status">尚未检查</pre></section>
 </div>
 <div class="tab-pane" data-pane="todo">
@@ -198,7 +199,7 @@ function showDash(){el("auth").classList.add("hidden");el("dashboard").classList
 async function boot(){try{var s=await api("/api/status");if(s.setup_required){showAuth(true);return}if(!s.authenticated){showAuth(false);return}csrf=s.csrf||"";showDash();await loadAll()}catch(e){showAuth(false)}}
 async function login(){var p=el("password").value;if(p.length<8){toast("密码至少 8 位",true);return}try{var d=await api(setupMode?"/api/setup":"/api/login",{method:"POST",body:JSON.stringify({password:p})});csrf=d.csrf||"";el("password").value="";showDash();await loadAll()}catch(e){toast(e.message,true)}}
 async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages");items=q.items||[];items.forEach(keyFor);pages=p.pages||[];editingKey="";dirty=false;el("saveQuotas").textContent="保存全部更改";renderPages();renderDisplaySwitches();renderQuotas();await loadExtras();await status()}
-async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;await loadDevice();await loadWifi()}
+async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;try{var qd=await api("/api/quota-display");el("quotaCardsPerPage").value=qd.cards_per_page||4;el("quotaAutoAdvance").value=qd.auto_advance_seconds||10;el("quotaForcePage").value=qd.force_page||0}catch(e){}await loadDevice();await loadWifi()}
 function memStatus(bytes,isInternal){var b=Number(bytes||0);var label,danger=false;if(isInternal){if(b<20*1024){label="危险";danger=true}else if(b<30*1024){label="紧张";danger=true}else{label="正常"}}else{if(b<512*1024){label="危险";danger=true}else if(b<2*1024*1024){label="紧张";danger=true}else{label="充足"}}var num=b>=1024*1024?(b/1024/1024).toFixed(1)+" MB":(b/1024).toFixed(1)+" KB";return{txt:label+" "+num,danger:danger}}
 function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=el(elId);e.textContent=s.txt;e.style.color=s.danger?"var(--bad)":""}
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
@@ -224,6 +225,7 @@ async function wifiApStop(){try{await api("/api/wifi/ap/stop",{method:"POST"});e
 async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();var url=URL.createObjectURL(blob);el("screenshotImg").src=url;el("screenshotLink").href=url;el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
 function renderDisplaySwitches(){var sorted=pages.slice().sort(function(a,b){return a.order-b.order});var h="";sorted.forEach(function(p){if(p.enabled)h+='<button onclick="switchPage(\''+p.id+'\')">'+(names[p.id]||p.id)+'</button>'});h+='<button onclick="switchPage(\'toggle\')">下一页</button>';el("displaySwitches").innerHTML=h}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
+async function saveQuotaDisplay(){var cards=Number(el("quotaCardsPerPage").value),adv=Number(el("quotaAutoAdvance").value),fp=Number(el("quotaForcePage").value);if(!Number.isInteger(cards)||cards<1||cards>4){toast("每屏卡片数必须为 1-4",true);return}if(!Number.isInteger(adv)||adv<0||adv>120){toast("自动翻页间隔必须为 0-120 秒",true);return}if(!Number.isInteger(fp)||fp<0||fp>32){toast("固定页码必须为 0-32",true);return}try{await api("/api/quota-display",{method:"PUT",body:JSON.stringify({cards_per_page:cards,auto_advance_seconds:adv,force_page:fp})});toast("AI 页显示配置已保存")}catch(e){toast(e.message,true)}}
 function renderTodos(){renderTodoSummary();var list=todos.filter(function(t){if(todoFilter==='active')return!t.completed;if(todoFilter==='completed')return t.completed;return true});if(!list.length){el("todos").innerHTML='<div class="empty">'+(todoFilter==='active'?'无未完成':todoFilter==='completed'?'无已完成':'暂无待办')+'</div>';return}el("todos").innerHTML=list.map(function(t){return '<div class="todo-row"><input type="checkbox" '+(t.completed?'checked':'')+' onchange="toggleTodo(\''+t.id+'\',this.checked)"><span>'+esc((t.due_date||'').slice(5)+(t.due_time?' '+t.due_time:''))+'</span><b>'+esc(t.content)+'</b><span><button onclick="editTodo(\''+t.id+'\')">编辑</button> <button class="danger" onclick="deleteTodo(\''+t.id+'\')">删除</button></span></div>'}).join('')}
 function setTodoFilter(f){todoFilter=f;el("filterAll").classList.toggle("primary",f==="all");el("filterActive").classList.toggle("primary",f==="active");el("filterCompleted").classList.toggle("primary",f==="completed");renderTodos()}
 function renderTodoSummary(){var n=new Date(),ys=n.getFullYear(),ms=String(n.getMonth()+1).padStart(2,'0'),ds=String(n.getDate()).padStart(2,'0'),today=ys+'-'+ms+'-'+ds;d=n.getDay()||7;var mon=new Date(n);mon.setDate(n.getDate()-d+1);mon.setHours(0,0,0,0);var sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);var t=0,w=0,c=0;todos.forEach(function(x){if(x.completed){c++;return}if(x.due_date===today)t++;else{var dd=new Date(x.due_date);if(dd>=mon&&dd<=sun)w++}});el("todoSummary").textContent="今日 "+t+" · 本周 "+w+" · 已完成 "+c;var active=todos.filter(function(x){return!x.completed}).length;el("todoCount").textContent=active}
@@ -531,6 +533,8 @@ bool AdminServer::Start() {
         {"/api/refresh", HTTP_POST, RefreshHandler, this},
         {"/api/refresh-interval", HTTP_GET, RefreshIntervalGetHandler, this},
         {"/api/refresh-interval", HTTP_PUT, RefreshIntervalPutHandler, this},
+        {"/api/quota-display", HTTP_GET, QuotaDisplayHandler, this},
+        {"/api/quota-display", HTTP_PUT, QuotaDisplayHandler, this},
         {"/api/proxy-diagnostic", HTTP_POST, ProxyDiagnosticHandler, this},
         {"/api/todos", HTTP_GET, TodosHandler, this}, {"/api/todos", HTTP_POST, TodosHandler, this},
         {"/api/todos/*", HTTP_GET, TodoItemHandler, this}, {"/api/todos/*", HTTP_PUT, TodoItemHandler, this},
@@ -701,6 +705,39 @@ esp_err_t AdminServer::RefreshIntervalPutHandler(httpd_req_t* req) {
         return Error(req, 400, error.empty() ? "刷新间隔必须为 1-60 分钟" : error);
     }
     return Json(req, "{\"ok\":true,\"minutes\":" + std::to_string(value) + "}");
+}
+
+esp_err_t AdminServer::QuotaDisplayHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (req->method == HTTP_GET) {
+        if (!self->IsAuthorized(req, false)) return Error(req, 401, "未登录");
+        auto& qm = QuotaManager::GetInstance();
+        cJSON* root = cJSON_CreateObject();
+        cJSON_AddNumberToObject(root, "cards_per_page", qm.GetCardsPerPage());
+        cJSON_AddNumberToObject(root, "auto_advance_seconds", qm.GetAutoAdvanceSeconds());
+        cJSON_AddNumberToObject(root, "force_page", qm.GetForcePage());
+        char* raw = cJSON_PrintUnformatted(root);
+        std::string out = raw ? raw : "{}";
+        if (raw) cJSON_free(raw);
+        cJSON_Delete(root);
+        return Json(req, out);
+    }
+    // PUT
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body, error;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    cJSON* root = cJSON_Parse(body.c_str());
+    cJSON* cpp = root ? cJSON_GetObjectItem(root, "cards_per_page") : nullptr;
+    cJSON* adv = root ? cJSON_GetObjectItem(root, "auto_advance_seconds") : nullptr;
+    cJSON* fp = root ? cJSON_GetObjectItem(root, "force_page") : nullptr;
+    const uint8_t cards = cJSON_IsNumber(cpp) ? static_cast<uint8_t>(cpp->valueint) : 4;
+    const uint8_t auto_adv = cJSON_IsNumber(adv) ? static_cast<uint8_t>(adv->valueint) : 10;
+    const uint8_t force = cJSON_IsNumber(fp) ? static_cast<uint8_t>(fp->valueint) : 0;
+    if (root) cJSON_Delete(root);
+    if (!QuotaManager::GetInstance().SetDisplayConfig(cards, auto_adv, force, error)) {
+        return Error(req, 400, error);
+    }
+    return Json(req, "{\"ok\":true}");
 }
 
 esp_err_t AdminServer::ProxyDiagnosticHandler(httpd_req_t* req) {

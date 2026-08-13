@@ -532,12 +532,28 @@ void CustomLcdDisplay::TickQuotaPage() {
             return;
         }
     }
-    if (display_mode_ == MODE_QUOTA && now - quota_page_changed_ms_ >= 10000) {
+    if (display_mode_ == MODE_QUOTA) {
+        const uint8_t auto_adv_sec = manager.GetAutoAdvanceSeconds();
+        const uint8_t force_page = manager.GetForcePage();
+        const uint8_t per_page = manager.GetCardsPerPage();
         auto cards = manager.GetCards();
-        const size_t pages = std::max<size_t>(1, (cards.size() + 3) / 4);
-        quota_subpage_ = (quota_subpage_ + 1) % pages;
-        quota_page_changed_ms_ = now;
-        needs_render = true;
+        const size_t total_pages = std::max<size_t>(1, (cards.size() + per_page - 1) / per_page);
+
+        if (force_page > 0) {
+            // 固定显示第 N 页（0 索引 = force_page - 1）
+            const size_t target = std::min<size_t>(force_page - 1, total_pages - 1);
+            if (quota_subpage_ != target) {
+                quota_subpage_ = target;
+                quota_page_changed_ms_ = now;
+                needs_render = true;
+            }
+        } else if (auto_adv_sec > 0 && now - quota_page_changed_ms_ >= auto_adv_sec * 1000ULL) {
+            // 自动翻页
+            quota_subpage_ = (quota_subpage_ + 1) % total_pages;
+            quota_page_changed_ms_ = now;
+            needs_render = true;
+        }
+        // auto_adv_sec == 0 且 force_page == 0：不翻页，停当前
     }
     if (needs_render) {
         DisplayLockGuard lock(this);
