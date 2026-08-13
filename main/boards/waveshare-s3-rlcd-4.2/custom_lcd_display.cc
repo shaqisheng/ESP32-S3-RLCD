@@ -543,10 +543,13 @@ void CustomLcdDisplay::TickQuotaPage() {
         auto cards = manager.GetCards();
         const size_t total_pages = std::max<size_t>(1, (cards.size() + per_page - 1) / per_page);
 
+        // force_page 只在"用户最近没手动翻过"时强制——避免覆盖 CycleDisplayMode 的手动翻页。
+        // 手动翻页会更新 quota_page_changed_ms_，这里等 auto_adv_sec 后再强制回 force_page。
         if (force_page > 0) {
-            // 固定显示第 N 页（0 索引 = force_page - 1）
             const size_t target = std::min<size_t>(force_page - 1, total_pages - 1);
-            if (quota_subpage_ != target) {
+            // 用户刚手动翻页（< auto_adv_sec）时不强制回 force_page
+            const uint32_t manual_grace_ms = (auto_adv_sec > 0 ? auto_adv_sec : 30) * 1000ULL;
+            if (quota_subpage_ != target && now - quota_page_changed_ms_ >= manual_grace_ms) {
                 quota_subpage_ = target;
                 quota_page_changed_ms_ = now;
                 needs_render = true;
