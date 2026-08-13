@@ -355,8 +355,12 @@ void CustomLcdDisplay::ApplyDisplayMode() {
 
 void CustomLcdDisplay::CycleDisplayMode() {
     DisplayLockGuard lock(this);
-    auto cards = QuotaManager::GetInstance().GetCards();
-    const size_t quota_pages = std::max<size_t>(1, (cards.size() + 3) / 4);
+    auto& qm = QuotaManager::GetInstance();
+    auto cards = qm.GetCards();
+    // 用配置的每屏卡数，不是硬编码 4——否则 cards_per_page=1 时 quota_pages
+    // 算错，子页翻页失效（"切到子页后立刻闪回"）
+    const size_t per_page = qm.GetCardsPerPage();
+    const size_t quota_pages = std::max<size_t>(1, (cards.size() + per_page - 1) / per_page);
     if (display_mode_ == MODE_QUOTA && quota_subpage_ + 1 < quota_pages) {
         quota_subpage_++;
         quota_page_changed_ms_ = xTaskGetTickCount() * portTICK_PERIOD_MS;
