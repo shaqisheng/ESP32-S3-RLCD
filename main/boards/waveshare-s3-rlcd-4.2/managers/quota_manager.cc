@@ -264,7 +264,8 @@ bool QuotaManager::SetRefreshIntervalMinutes(uint32_t minutes, std::string& erro
     nvs_close(handle);
     if (result != ESP_OK) { error = "保存刷新间隔失败"; return false; }
     refresh_interval_minutes_ = minutes;
-    refresh_requested_ = true;
+    // 不触发 refresh_requested_——改间隔只是改频率，下次按新间隔刷即可，
+    // 不应立刻拉数据（用户改显示配置/刷新频率时不应触发网络请求）。
     revision_++;
     return true;
 }
