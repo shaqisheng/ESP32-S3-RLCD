@@ -43,52 +43,6 @@ constexpr int64_t kSessionTimeoutSec = 60 * 60;            // 1 小时不操作�
 constexpr int64_t kSessionPersistIntervalUs = 5 * 60 * 1000000LL;  // 每 5 分钟写一次 NVS
 constexpr int64_t kMinValidEpochSec = 1700000000;          // 2023-11，用于墙上时钟有效性自检
 
-// Wi-Fi 扫描状态（跨请求共享）
-struct WifiScanState {
-    std::mutex mutex;
-    bool scanning = false;
-    int64_t started_at = 0;
-    std::string results_json;  // 缓存的扫描结果 JSON
-};
-WifiScanState& GetScanState() {
-    static WifiScanState state;
-    return state;
-}
-
-// Wi-Fi 扫描完成回调（在 WIFI_EVENT 任务上下文执行）
-// Wi-Fi 扫描完成回调（在 WIFI_EVENT 任务上下文执行）
-// 注意：WifiStation 也注册了 SCAN_DONE handler 会消费结果（HandleScanResult 挑 SSID 连接）。
-// 我们注册在它们之后仍能拿到结果——esp_wifi_scan_get_ap_records 可重复调用，
-// 只要 esp_wifi_clear_scan_result 没被调。
-void OnWifiScanDone(void* arg, esp_event_base_t base, int32_t id, void* data) {
-    uint16_t count = 0;
-    esp_err_t err = esp_wifi_scan_get_ap_num(&count);
-    ESP_LOGI(TAG, "Wi-Fi 扫描完成回调：ap_num=%d (err=%s)", count, esp_err_to_name(err));
-    std::vector<wifi_ap_record_t> records(count);
-    uint16_t actual = count;
-    if (count > 0) {
-        err = esp_wifi_scan_get_ap_records(&actual, records.data());
-        ESP_LOGI(TAG, "esp_wifi_scan_get_ap_records: actual=%d err=%s", actual, esp_err_to_name(err));
-    }
-    auto& state = GetScanState();
-    std::lock_guard<std::mutex> lock(state.mutex);
-    cJSON* arr = cJSON_CreateArray();
-    for (uint16_t i = 0; i < actual; ++i) {
-        cJSON* ap = cJSON_CreateObject();
-        cJSON_AddStringToObject(ap, "ssid", reinterpret_cast<const char*>(records[i].ssid));
-        cJSON_AddNumberToObject(ap, "rssi", records[i].rssi);
-        cJSON_AddNumberToObject(ap, "channel", records[i].primary);
-        cJSON_AddNumberToObject(ap, "authmode", records[i].authmode);
-        cJSON_AddItemToArray(arr, ap);
-    }
-    char* raw = cJSON_PrintUnformatted(arr);
-    state.results_json = raw ? raw : "[]";
-    if (raw) cJSON_free(raw);
-    cJSON_Delete(arr);
-    state.scanning = false;
-    esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, OnWifiScanDone);
-}
-
 void ScheduleTodoDisplayRefresh() {
     Application::GetInstance().Schedule([]() {
         auto* display = static_cast<CustomLcdDisplay*>(Board::GetInstance().GetDisplay());
@@ -175,10 +129,6 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <hr style="margin:14px 0;border:0;border-top:1px dashed #aaa">
 <label>已保存的 Wi-Fi</label><div id="wifiSaved" style="margin:8px 0"></div>
 <div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="openWifiModal()">＋ 新增 Wi-Fi</button><button class="danger" onclick="wifiDisconnect()">断开连接</button></div>
-<hr style="margin:14px 0;border:0;border-top:1px dashed #aaa">
-<label>扫描周围网络</label>
-<div class="toolbar" style="margin:8px 0;justify-content:flex-start"><button onclick="wifiScan(this)">开始扫描</button></div>
-<div id="wifiScanResults" style="margin:8px 0"></div>
 <hr style="margin:14px 0;border:0;border-top:1px dashed #aaa">
 <label>AP 热点模式</label>
 <p class="hint">启用后设备自己开 Wi-Fi 热点，手机/电脑连上后可访问后台。会断开当前 station 连接。</p>
@@ -268,7 +218,6 @@ async function wifiDisconnect(){if(!confirm("断开当前 Wi-Fi？设备将进�
 function openWifiModal(){el("wifiModalSsid").value="";el("wifiModalPassword").value="";el("wifiModal").classList.add("open");setTimeout(function(){el("wifiModalSsid").focus()},50)}
 function closeWifiModal(){el("wifiModal").classList.remove("open")}
 async function submitWifiModal(){var ssid=el("wifiModalSsid").value.trim(),pass=el("wifiModalPassword").value;if(!ssid){toast("请输入 SSID",true);return}try{await api("/api/wifi",{method:"POST",body:JSON.stringify({ssid:ssid,password:pass})});toast("已保存");closeWifiModal();loadWifi()}catch(e){toast(e.message,true)}}
-async function wifiScan(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{await api("/api/wifi/scan",{method:"POST"});toast("扫描中…");setTimeout(async function poll(){var d=await api("/api/wifi/scan-results");if(d.scanning){setTimeout(poll,1500);return}var aps=d.aps||[];if(!aps.length){el("wifiScanResults").innerHTML='<div class="empty">未发现网络（仅扫描当前信道）</div>'}else{var h="";aps.forEach(function(ap){h+='<div class="todo-row"><span></span><b>'+esc(ap.ssid||"(隐藏)")+'</b><span style="font-size:12px;color:var(--muted)">'+ap.rssi+' dBm · 信道 '+ap.channel+'</span><span><button onclick="prefillWifi(\''+esc(ap.ssid||"")+'\')">填入</button></span></div>'});el("wifiScanResults").innerHTML=h}btn.textContent=orig;btn.disabled=false},2500)}catch(e){btn.textContent=orig;btn.disabled=false;toast(e.message,true)}}
 function prefillWifi(ssid){el("wifiModalSsid").value=ssid;el("wifiModal").classList.add("open");setTimeout(function(){el("wifiModalPassword").focus()},50)}
 async function wifiApStart(btn){if(!confirm("启用 AP 热点将断开当前 Wi-Fi station，浏览器会失去连接。继续？"))return;var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var d=await api("/api/wifi/ap/start",{method:"POST"});el("wifiApInfo").textContent="热点 SSID: "+(d.ssid||"?")+" · 访问: "+(d.url||"?");el("wifiApInfo").style.display="block";toast("AP 热点已启用");btn.textContent=orig;btn.disabled=false}catch(e){btn.textContent=orig;btn.disabled=false;toast(e.message,true)}}
 async function wifiApStop(){try{await api("/api/wifi/ap/stop",{method:"POST"});el("wifiApInfo").style.display="none";toast("AP 热点已停止")}catch(e){toast(e.message,true)}}
@@ -600,8 +549,6 @@ bool AdminServer::Start() {
         {"/api/wifi/default", HTTP_PUT, WifiDefaultHandler, this},
         {"/api/wifi/connect", HTTP_POST, WifiConnectHandler, this},
         {"/api/wifi/disconnect", HTTP_POST, WifiDisconnectHandler, this},
-        {"/api/wifi/scan", HTTP_POST, WifiScanHandler, this},
-        {"/api/wifi/scan-results", HTTP_GET, WifiScanResultsHandler, this},
         {"/api/wifi/ap/start", HTTP_POST, WifiApStartHandler, this},
         {"/api/wifi/ap/stop", HTTP_POST, WifiApStopHandler, this},
         {"/api/wifi/*", HTTP_DELETE, WifiDeleteHandler, this},
@@ -1084,55 +1031,6 @@ esp_err_t AdminServer::WifiDisconnectHandler(httpd_req_t* req) {
     if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
     WifiManager::GetInstance().StopStation();
     return Json(req, "{\"ok\":true}");
-}
-
-esp_err_t AdminServer::WifiScanHandler(httpd_req_t* req) {
-    auto* self = Self(req);
-    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
-    auto& state = GetScanState();
-    {
-        std::lock_guard<std::mutex> lock(state.mutex);
-        if (state.scanning) return Json(req, "{\"ok\":true,\"scanning\":true}");
-        state.scanning = true;
-        state.results_json.clear();
-        state.started_at = time(nullptr);
-    }
-    // 注册一次性回调（scan_done 触发后自动注销）
-    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, OnWifiScanDone, nullptr);
-
-    // ESP-IDF 限制：已连接 station 扫描只能看当前信道。
-    // 尝试过断开 station 扫全信道，但 StopStation + esp_wifi_start 的状态机
-    // 恢复太脆弱（设备起不来）。回退到简单方案：只扫当前信道。
-    wifi_scan_config_t cfg = {};
-    cfg.show_hidden = true;
-    cfg.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-    esp_err_t err = esp_wifi_scan_start(&cfg, false);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Wi-Fi 扫描启动失败: %s", esp_err_to_name(err));
-        std::lock_guard<std::mutex> lock(state.mutex);
-        state.scanning = false;
-        esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, OnWifiScanDone);
-        return Error(req, 500, "扫描启动失败");
-    }
-    ESP_LOGI(TAG, "Wi-Fi 扫描已启动（当前信道）");
-    return Json(req, "{\"ok\":true,\"scanning\":true,\"note\":\"只扫描当前信道\"}");
-}
-
-esp_err_t AdminServer::WifiScanResultsHandler(httpd_req_t* req) {
-    auto* self = Self(req);
-    if (!self->IsAuthorized(req, false)) return Error(req, 401, "未登录");
-    auto& state = GetScanState();
-    std::lock_guard<std::mutex> lock(state.mutex);
-    if (state.scanning) return Json(req, "{\"scanning\":true,\"aps\":[]}");
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddBoolToObject(root, "scanning", false);
-    cJSON* aps = cJSON_Parse(state.results_json.empty() ? "[]" : state.results_json.c_str());
-    if (aps) cJSON_AddItemToObject(root, "aps", aps);
-    char* raw = cJSON_PrintUnformatted(root);
-    std::string out = raw ? raw : "{}";
-    if (raw) cJSON_free(raw);
-    cJSON_Delete(root);
-    return Json(req, out);
 }
 
 esp_err_t AdminServer::WifiApStartHandler(httpd_req_t* req) {
