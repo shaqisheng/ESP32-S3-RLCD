@@ -498,6 +498,7 @@ void QuotaManager::RefreshAll() {
     std::vector<QuotaCard> next;
     bool all_ok = true;
     bool has_enabled = false;
+    std::string last_provider;  // 跟踪上一个 provider，同 provider 间隔加大避免限流
     for (const auto& entry : entries) {
         if (network_session.cancelled()) {
             all_ok = false;
@@ -511,7 +512,26 @@ void QuotaManager::RefreshAll() {
         if (!entry.enabled) { next.push_back(fresh); continue; }
         has_enabled = true;
         bool transient = false;
-        if (RefreshOne(entry, fresh, transient)) {
+        bool ok = RefreshOne(entry, fresh, transient);
+        // transient 错误（网络层失败）重试最多 3 次，间隔递增（2s/4s/8s）
+        // 应对同代理同目标的偶发 socket/TLS 失败
+        for (int attempt = 1; !ok && transient && attempt <= 3 && !network_session.cancelled(); ++attempt) {
+            const uint32_t backoff_ms = 1000 * (1 << attempt);  // 2s, 4s, 8s
+            vTaskDelay(pdMS_TO_TICKS(backoff_ms));
+            QuotaCard retry_card;
+            retry_card.id = entry.id;
+            retry_card.name = fresh.name;
+            retry_card.provider = entry.provider;
+            retry_card.enabled = entry.enabled;
+            bool retry_transient = false;
+            if (RefreshOne(entry, retry_card, retry_transient)) {
+                fresh = retry_card;
+                ok = true;
+            } else {
+                transient = retry_transient;  // 只有 transient 才继续重试
+            }
+        }
+        if (ok) {
             fresh.valid = true;
             fresh.stale = false;
             fresh.success_at = fresh.checked_at;
@@ -529,7 +549,11 @@ void QuotaManager::RefreshAll() {
             }
         }
         next.push_back(fresh);
-        vTaskDelay(pdMS_TO_TICKS(150));
+        // 同 provider（尤其同代理+同目标）间隔加大到 1.5 秒避免限流；
+        // 不同 provider 保持 150ms 快速串行
+        const uint32_t delay_ms = (entry.provider == last_provider) ? 1500 : 150;
+        last_provider = entry.provider;
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
     }
     {
         std::lock_guard<std::mutex> lock(mutex_);
