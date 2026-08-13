@@ -94,16 +94,35 @@ private:
     }
 
     void InitializeButtons() { 
-        // BOOT 按钮（GPIO0）- 主要交互按键
+        // BOOT 按钮（GPIO0）- 上下文感知
         boot_button_.OnClick([this]() {
-            if (display_) display_->NotifyUserActivity();  // 记录用户活动
+            if (display_) display_->NotifyUserActivity();
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
             }
-            // 用户语音优先：通知正在执行的天气/额度 TLS 尽快退出，并给资源释放
-            // 一个很短的窗口，避免音频通道与后台 TLS 同时争抢内部 SRAM。
+            // 上下文分发：
+            //   AI 页 → 刷新账号额度
+            //   天气页 → 刷新天气
+            //   综合页 → 切小智对话（原行为）
+            //   其他页（日历/待办） → 无操作
+            if (display_ && display_->IsQuotaMode()) {
+                ESP_LOGI(TAG, "BOOT 单击（AI 页）：刷新账号额度");
+                QuotaManager::GetInstance().RequestRefresh();
+                return;
+            }
+            if (display_ && display_->IsForecastMode()) {
+                ESP_LOGI(TAG, "BOOT 单击（天气页）：刷新天气");
+                display_->MarkWeatherRefreshing();  // 立刻把头部 label 改成"正在刷新…"
+                WeatherManager::getInstance().RequestRefresh();
+                return;
+            }
+            if (display_ && !display_->IsOverviewMode()) {
+                ESP_LOGI(TAG, "BOOT 单击（非综合页）：忽略");
+                return;
+            }
+            // 综合页：原行为——切小智对话，先取消后台网络避免抢 SRAM
             rlcd::CancelBackgroundNetwork();
             for (int attempt = 0; attempt < 30 && rlcd::IsBackgroundNetworkActive(); ++attempt) {
                 vTaskDelay(pdMS_TO_TICKS(50));

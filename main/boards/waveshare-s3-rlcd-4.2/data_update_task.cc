@@ -205,6 +205,13 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
         localtime_r(&now, &timeinfo);
 
         // 网络数据只在连续空闲时更新，避免影响语音链路。
+        // 但"正在刷新…"提示必须每秒都检查（不等空闲条件），否则用户看不到反馈。
+        {
+            auto& weather_manager = WeatherManager::getInstance();
+            if (weather_manager.IsRefreshing() && self->IsForecastMode()) {
+                self->MarkWeatherRefreshing();
+            }
+        }
         if (can_run_background_requests && idle_long_enough) {
             auto& weather_manager = WeatherManager::getInstance();
             const bool weather_requested = weather_manager.TakeRefreshRequest();

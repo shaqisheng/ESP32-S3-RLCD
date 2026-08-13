@@ -32,6 +32,7 @@
 #include "lvgl_theme.h"
 #include "managers/quota_manager.h"
 #include "managers/todo_manager.h"
+#include "managers/weather_manager.h"
 
 static const char *TAG = "CustomDisplay";
 
@@ -507,6 +508,15 @@ void CustomLcdDisplay::SwitchToQuotaPage() {
     display_mode_ = MODE_QUOTA;
     quota_subpage_ = 0;
     ApplyDisplayMode();
+}
+
+// BOOT 单击天气页时立刻把头部 label 改成"正在刷新…"——不等 data_update_task
+// 的下次周期循环，否则用户看不到反馈。
+void CustomLcdDisplay::MarkWeatherRefreshing() {
+    DisplayLockGuard lock(this);
+    if (forecast_updated_label_) {
+        lv_label_set_text(forecast_updated_label_, "正在刷新…");
+    }
 }
 
 void CustomLcdDisplay::TickQuotaPage() {

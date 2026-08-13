@@ -239,12 +239,15 @@ public:
     bool IsCalendarMode() const { return display_mode_ == MODE_CALENDAR; }
     bool IsForecastMode() const { return display_mode_ == MODE_FORECAST; }
     bool IsTodoMode() const { return display_mode_ == MODE_TODO; }
+    bool IsOverviewMode() const { return display_mode_ == MODE_OVERVIEW; }
     void SwitchToCalendarPage();
     void SwitchToForecastPage();
     void SwitchToPomodoroPage();
     void SwitchToQuotaPage();
     void SwitchToTodoPage();
     void UpdateTodoPageInternal();
+    // 立即在天气页头部显示"正在刷新…"（BOOT 单击时调用）
+    void MarkWeatherRefreshing();
     void TickQuotaPage();
 
     // 番茄钟 UI 更新方法
