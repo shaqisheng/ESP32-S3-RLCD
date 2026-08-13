@@ -323,6 +323,11 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
     }
 
     for (size_t slot = 0; slot < 4; ++slot) {
+        // 只渲染当前页的 visible_count 张；其他 slot 必须隐藏（否则叠加）
+        if (slot >= visible_count) {
+            lv_obj_add_flag(quota_cards_[slot], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
         const size_t index = page_start + slot;
         if (empty || index >= cards.size()) {
             lv_obj_add_flag(quota_cards_[slot], LV_OBJ_FLAG_HIDDEN);
