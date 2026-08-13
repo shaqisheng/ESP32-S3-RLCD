@@ -488,6 +488,7 @@ void QuotaManager::RefreshAll() {
     rlcd::BackgroundNetworkSession network_session;
     if (network_session.cancelled()) return;
     refreshing_ = true;
+    const uint32_t target_id = refresh_target_id_.exchange(0);  // 取出并清零
     std::vector<Entry> entries;
     std::vector<QuotaCard> previous;
     {
@@ -510,6 +511,13 @@ void QuotaManager::RefreshAll() {
         fresh.provider = entry.provider;
         fresh.enabled = entry.enabled;
         if (!entry.enabled) { next.push_back(fresh); continue; }
+        // 指定 target_id 时跳过不匹配的 entry（保留旧数据）
+        if (target_id != 0 && entry.id != target_id) {
+            auto old = std::find_if(previous.begin(), previous.end(), [&](const QuotaCard& c) { return c.id == entry.id; });
+            if (old != previous.end()) next.push_back(*old);
+            else next.push_back(fresh);
+            continue;
+        }
         has_enabled = true;
         bool transient = false;
         bool ok = RefreshOne(entry, fresh, transient);
@@ -558,7 +566,8 @@ void QuotaManager::RefreshAll() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         cards_ = std::move(next);
-        if (all_ok && has_enabled) last_all_success_at_ = time(nullptr);
+        // 只在全量刷新（target_id==0）且全部成功时才更新 all_ok 时间戳
+        if (target_id == 0 && all_ok && has_enabled) last_all_success_at_ = time(nullptr);
         last_refresh_completed_at_ = time(nullptr);  // 刷新完成就更新（不管成败）
         revision_++;
     }

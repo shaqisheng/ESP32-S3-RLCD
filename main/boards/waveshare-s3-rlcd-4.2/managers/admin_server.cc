@@ -250,7 +250,7 @@ async function regenToken(){if(!confirm("旧 Token 将立即失效，继续？")
 function renderPages(){var h="";pages.forEach(function(p,i){h+='<div class="page-row"><input type="checkbox" '+(p.enabled?"checked":"")+' onchange="pages['+i+'].enabled=this.checked;renderDisplaySwitches()"><b>'+(names[p.id]||p.id)+'</b><span class="arrows"><button onclick="movePage('+i+',-1)">↑</button> <button onclick="movePage('+i+',1)">↓</button></span></div>'});el("pages").innerHTML=h}
 function movePage(i,d){var n=i+d;if(n<0||n>=pages.length)return;var x=pages[i];pages[i]=pages[n];pages[n]=x;renderPages()}
 function field(i,key,label,type,wide){var v=items[i][key]===undefined?"":items[i][key];return '<div class="field '+(wide?"wide":"")+'"><label>'+label+'<input '+(type?'type="'+type+'" ':"")+'value="'+esc(v)+'" oninput="items['+i+'].'+key+'=this.value;markDirty()"></label></div>'}
-function renderQuotas(){el("count").textContent=items.length+" / 32";if(!items.length){el("quotas").innerHTML='<div class="empty">尚未配置额度来源<br><span class="hint">点击“添加账号”创建第一项</span></div>';return}var h="";items.forEach(function(x,i){var key=keyFor(x),opened=editingKey===key,state=x.enabled===false?"disabled":(x.status||"pending"),options=["codex","kimi","glm-cn","glm-global","deepseek","generic-json","manual"].map(function(p){return '<option value="'+p+'" '+(x.provider===p?"selected":"")+'>'+providerNames[p]+"</option>"}).join("");h+='<div class="quota '+(x.enabled===false?"disabled":"")+'"><div class="quota-head"><div class="identity">'+providerLogo(x.provider,"account-logo")+'<b>'+esc(x.name||"未命名账号")+'</b><span class="badge">'+esc(providerNames[x.provider]||x.provider)+'</span><span class="state '+state+'">'+esc(stateNames[state]||state)+'</span>'+(x.error?'<span class="hint">'+esc(x.error)+'</span>':"")+'</div><div class="actions"><button onclick="toggleEdit('+i+')">'+(opened?"收起":"管理")+'</button><button onclick="toggleEnabled('+i+')">'+(x.enabled===false?"启用":"停用")+'</button><button onclick="moveItem('+i+',-1)">↑</button><button onclick="moveItem('+i+',1)">↓</button><button class="danger" onclick="delItem('+i+')">删除</button></div></div><div class="quota-body '+(opened?"":"hidden")+'">';h+=field(i,"name","屏幕名称")+'<div class="field"><label>供应商<select onchange="items['+i+'].provider=this.value;markDirty();renderQuotas()">'+options+'</select></label></div>';
+function renderQuotas(){el("count").textContent=items.length+" / 32";if(!items.length){el("quotas").innerHTML='<div class="empty">尚未配置额度来源<br><span class="hint">点击“添加账号”创建第一项</span></div>';return}var h="";items.forEach(function(x,i){var key=keyFor(x),opened=editingKey===key,state=x.enabled===false?"disabled":(x.status||"pending"),options=["codex","kimi","glm-cn","glm-global","deepseek","generic-json","manual"].map(function(p){return '<option value="'+p+'" '+(x.provider===p?"selected":"")+'>'+providerNames[p]+"</option>"}).join("");h+='<div class="quota '+(x.enabled===false?"disabled":"")+'"><div class="quota-head"><div class="identity">'+providerLogo(x.provider,"account-logo")+'<b>'+esc(x.name||"未命名账号")+'</b><span class="badge">'+esc(providerNames[x.provider]||x.provider)+'</span><span class="state '+state+'">'+esc(stateNames[state]||state)+'</span>'+(x.error?'<span class="hint">'+esc(x.error)+'</span>':"")+'</div><div class="actions"><button onclick="refreshOne('+i+')">刷新</button><button onclick="toggleEdit('+i+')">'+(opened?"收起":"管理")+'</button><button onclick="toggleEnabled('+i+')">'+(x.enabled===false?"启用":"停用")+'</button><button onclick="moveItem('+i+',-1)">↑</button><button onclick="moveItem('+i+',1)">↓</button><button class="danger" onclick="delItem('+i+')">删除</button></div></div><div class="quota-body '+(opened?"":"hidden")+'">';h+=field(i,"name","屏幕名称")+'<div class="field"><label>供应商<select onchange="items['+i+'].provider=this.value;markDirty();renderQuotas()">'+options+'</select></label></div>';
 if(x.provider!=="manual")h+=field(i,"secret",x.has_secret?"新凭据（留空保留现有）":"API KEY / ACCESS TOKEN","password",true)+'<div class="secret-note wide">'+(x.has_secret?'设备中已有凭据，此处不会回显。 <label><input style="width:auto;margin-left:10px" type="checkbox" onchange="items['+i+'].clear_secret=this.checked;markDirty()">清除凭据</label>':"尚未保存凭据。")+'</div>';
 if(x.provider!=="manual"){h+='<div class="proxy-box"><label class="proxy-toggle"><input type="checkbox" '+(x.proxy_enabled?"checked":"")+' onchange="items['+i+'].proxy_enabled=this.checked;markDirty();renderQuotas()">查询余额使用代理</label>';if(x.proxy_enabled){var proxyHint=x.has_proxy_auth?"已保存认证代理，留空保留":(x.proxy_endpoint||"http://主机:端口");h+='<div class="field" style="margin-top:9px"><label>CONNECT 代理地址<input type="password" value="" placeholder="'+esc(proxyHint)+'" autocomplete="new-password" oninput="items['+i+'].proxy_url=this.value;markDirty()"></label></div><p class="hint proxy-note">'+(x.proxy_endpoint?"当前端点："+esc(x.proxy_endpoint)+"<br>":"")+'支持 http:// 或 https:// 用户名:密码@主机:端口；凭据不会回显，代理和目标 HTTPS 证书都会校验。</p>'+(x.proxy_endpoint?'<label><input style="width:auto;margin-right:10px" type="checkbox" onchange="items['+i+'].clear_proxy=this.checked;markDirty()">清除已保存代理</label><button type="button" onclick="testProxy()">测试代理</button>':"")}h+='</div>'}
 if(x.provider==="codex")h+=field(i,"account_id","ChatGPT Account ID（可选）",null,true);
@@ -264,6 +264,7 @@ function delItem(i){if(!confirm("删除账号“"+(items[i].name||"未命名")+"
 function moveItem(i,d){var n=i+d;if(n<0||n>=items.length)return;var x=items[i];items[i]=items[n];items[n]=x;markDirty();renderQuotas()}
 async function savePages(){try{await api("/api/pages",{method:"PUT",body:JSON.stringify({pages:pages})});toast("页面顺序已保存")}catch(e){toast(e.message,true)}}
 async function saveQuotas(){try{await api("/api/quotas",{method:"PUT",body:JSON.stringify({items:items})});toast("账号更改已保存，准备刷新");await loadAll()}catch(e){toast(e.message,true)}}
+async function refreshOne(i){var x=items[i];if(!x||!x.id){toast("请先保存账号",true);return}try{await api("/api/refresh-one",{method:"POST",body:JSON.stringify({id:x.id})});toast("已加入刷新队列");setTimeout(loadAll,3500)}catch(e){toast(e.message,true)}}
 async function testProxy(){if(dirty){toast("请先保存账号更改，再测试代理",true);return}try{await api("/api/refresh",{method:"POST"});toast("代理测试已开始，结果会显示在账号状态中");setTimeout(loadAll,3500)}catch(e){toast(e.message,true)}}
 async function status(){try{var s=await api("/api/status");csrf=s.csrf||csrf;lastSuccess=Number(s.last_all_success_at)||0;el("ip").textContent=s.ip||"NO NETWORK";var d=lastSuccess?new Date(lastSuccess*1000):null;el("runStatus").className="status "+(s.refreshing?"":"ok");el("runStatus").textContent=s.refreshing?"正在串行刷新…":("上次全部成功："+(d?d.toLocaleString():"尚无"));el("clock").textContent=new Date().toLocaleTimeString();await loadDevice()}catch(e){}}
 el("authBtn").onclick=login;el("password").onkeydown=function(e){if(e.key==="Enter")login()};el("addBtn").onclick=add;el("reloadBtn").onclick=function(){if(!dirty||confirm("放弃尚未保存的账号修改？"))loadAll()};el("savePages").onclick=savePages;el("saveQuotas").onclick=saveQuotas;
@@ -533,6 +534,7 @@ bool AdminServer::Start() {
         {"/api/pages", HTTP_GET, PagesGetHandler, this}, {"/api/pages", HTTP_PUT, PagesPutHandler, this},
         {"/api/quotas", HTTP_GET, QuotasGetHandler, this}, {"/api/quotas", HTTP_PUT, QuotasPutHandler, this},
         {"/api/refresh", HTTP_POST, RefreshHandler, this},
+        {"/api/refresh-one", HTTP_POST, QuotaRefreshOneHandler, this},
         {"/api/refresh-interval", HTTP_GET, RefreshIntervalGetHandler, this},
         {"/api/refresh-interval", HTTP_PUT, RefreshIntervalPutHandler, this},
         {"/api/quota-display", HTTP_GET, QuotaDisplayHandler, this},
@@ -687,6 +689,22 @@ esp_err_t AdminServer::RefreshHandler(httpd_req_t* req) {
     if (!Self(req)->IsAuthorized(req, true)) return Error(req, 401, "未登录");
     QuotaManager::GetInstance().RequestRefresh();
     return Json(req, "{\"ok\":true}");
+}
+
+esp_err_t AdminServer::QuotaRefreshOneHandler(httpd_req_t* req) {
+    if (!Self(req)->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    cJSON* root = cJSON_Parse(body.c_str());
+    cJSON* id_item = root ? cJSON_GetObjectItem(root, "id") : nullptr;
+    if (!cJSON_IsNumber(id_item) || id_item->valuedouble < 0) {
+        if (root) cJSON_Delete(root);
+        return Error(req, 400, "id 无效");
+    }
+    const uint32_t id = static_cast<uint32_t>(id_item->valuedouble);
+    if (root) cJSON_Delete(root);
+    QuotaManager::GetInstance().RequestRefreshOne(id);
+    return Json(req, "{\"ok\":true,\"id\":" + std::to_string(id) + "}");
 }
 
 esp_err_t AdminServer::RefreshIntervalGetHandler(httpd_req_t* req) {

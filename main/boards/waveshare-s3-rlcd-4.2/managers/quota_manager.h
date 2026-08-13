@@ -44,6 +44,8 @@ public:
     bool Init();
     void Start();
     void RequestRefresh();
+    // 请求只刷新指定 entry id 的账号（其他账号跳过）
+    void RequestRefreshOne(uint32_t id) { refresh_target_id_.store(id); refresh_requested_.store(true); }
 
     std::vector<QuotaCard> GetCards() const;
     std::vector<QuotaPageSetting> GetPageSettings() const;
@@ -97,6 +99,7 @@ private:
     std::vector<QuotaPageSetting> pages_;
     std::atomic<uint32_t> revision_{1};
     std::atomic<bool> refresh_requested_{false};
+    std::atomic<uint32_t> refresh_target_id_{0};  // 0=全部，非 0=只刷指定 entry id
     std::atomic<bool> refreshing_{false};
     TaskHandle_t task_ = nullptr;
     int64_t last_all_success_at_ = 0;
