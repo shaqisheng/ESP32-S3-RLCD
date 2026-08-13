@@ -436,9 +436,16 @@ void AdminServer::ClearPersistedSession() {
 
 void AdminServer::CreateSession(std::string& sid, std::string& csrf) {
     std::lock_guard<std::mutex> lock(session_mutex_);
-    session_id_ = HexRandom(16);
-    csrf_token_ = HexRandom(16);
-    session_seen_sec_ = time(nullptr);
+    // 如果已有有效会话且未过期，复用同一个 sid/csrf（避免多 tab/重复登录互相顶掉）
+    const int64_t now = time(nullptr);
+    const bool has_valid_session = !session_id_.empty() &&
+                                   now >= kMinValidEpochSec &&
+                                   (now - session_seen_sec_) <= kSessionTimeoutSec;
+    if (!has_valid_session) {
+        session_id_ = HexRandom(16);
+        csrf_token_ = HexRandom(16);
+    }
+    session_seen_sec_ = now;
     session_last_persisted_us_ = esp_timer_get_time();
     sid = session_id_;
     csrf = csrf_token_;
@@ -452,7 +459,7 @@ bool AdminServer::IsAuthorized(httpd_req_t* req, bool csrf) {
     if (sid.empty()) return false;
     std::lock_guard<std::mutex> lock(session_mutex_);
     const int64_t now = time(nullptr);
-    if (now < kMinValidEpochSec) return false;  // 时钟未就绪（RTC/NTP 异常）
+    if (now < kMinValidEpochSec) return false;
     if (session_id_.empty() || sid != session_id_ || now - session_seen_sec_ > kSessionTimeoutSec) {
         session_id_.clear();
         return false;
