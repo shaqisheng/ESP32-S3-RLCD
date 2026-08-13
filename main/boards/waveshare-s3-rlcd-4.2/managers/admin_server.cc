@@ -116,7 +116,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><div class="toolbar"><h2 style="border:0;margin:0">待办事项 <span id="todoCount" class="badge">0</span></h2><button onclick="openTodoModal()">＋ 新增待办</button></div><div id="todos"></div></section>
 </div>
 <div class="tab-pane" data-pane="integ">
-<section class="panel"><h2>城市天气</h2><p class="hint">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>高德城市 adcode（必填）<input id="amap_adcode" autocomplete="off" placeholder="例如 320500"></label></div><div class="field"><label>高德 Web 服务 Key<input id="amapWebKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearAmapKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存高德 Key</label><p id="weatherKeyState" class="hint">高德 Key 不会回显</p><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="weatherDiagnostic()">查看天气诊断</button></div><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
+<section class="panel"><h2>城市天气</h2><p class="hint">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>高德城市 adcode（必填）<input id="amap_adcode" autocomplete="off" placeholder="例如 320500"></label></div><div class="field"><label>高德 Web 服务 Key<input id="amapWebKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearAmapKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存高德 Key</label><p id="weatherKeyState" class="hint">高德 Key 不会回显</p><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="refreshWeather(this)">立即刷新天气</button><button onclick="weatherDiagnostic()">查看天气诊断</button></div><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
@@ -228,6 +228,7 @@ function renderWeatherProvinces(selectedProvince,selectedCity){var provinces=Obj
 function renderWeatherCities(province,selectedCity){var cities=cityCatalog[province]||[];el("weatherCity").innerHTML=cities.map(function(c,i){return '<option value="'+i+'" '+(c[0]===selectedCity?'selected':'')+'>'+esc(c[0])+'</option>'}).join("")}
 async function saveWeather(){var province=el("weatherProvince").value,cities=cityCatalog[province]||[],city=cities[Number(el("weatherCity").value)],adcode=el("amap_adcode").value.trim(),minutes=Number(el("weatherRefreshMinutes").value);if(!city){toast("请选择城市",true);return}if(!/^\d{6}$/.test(adcode)){toast("请填写 6 位高德城市 adcode",true);return}if(!Number.isInteger(minutes)||minutes<5||minutes>120){toast("天气刷新间隔必须为 5–120 分钟",true);return}var key=el("amapWebKey").value;await api("/api/weather",{method:"PUT",body:JSON.stringify({province:province,city:city[0],latitude:city[1],longitude:city[2],amap_adcode:adcode,amap_key:key,clear_amap_key:el("weatherClearAmapKey").checked,refresh_interval_minutes:minutes})});el("amapWebKey").value="";el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent="高德配置已保存（Key 不会回显）";toast("配置已保存，设备空闲后立即检测")}
 async function weatherDiagnostic(){var box=el("weatherDiagnostic");box.textContent="正在读取最近一次天气请求…";try{var d=await api("/api/weather-diagnostic");box.textContent="接口："+(d.endpoint||"未请求")+"\nHTTP："+(d.http_status||"未请求")+"\n结果："+(d.result||"无返回");box.className="status "+(d.ok?"ok":"bad")}catch(e){box.textContent="诊断失败："+e.message;box.className="status bad"}}
+async function refreshWeather(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{await api("/api/weather/refresh",{method:"POST"});btn.classList.add("success");btn.textContent="✓";toast("天气刷新请求已排队");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast(e.message,true)}}
 async function proxyDiagnostic(){var box=el("proxyDiagnostic");box.textContent="正在检查 TCP、CONNECT、TLS…";try{var d=await api("/api/proxy-diagnostic",{method:"POST"});box.textContent="端点："+(d.endpoint||"未配置")+"\n阶段："+(d.stage||"未知")+"\n结果："+(d.message||"无返回");box.className="status "+(d.tcp_connected?"ok":"bad")}catch(e){box.textContent="诊断失败："+e.message;box.className="status bad"}}
 async function saveCalendar(){await api("/api/calendar",{method:"PUT",body:JSON.stringify({source:el("holidaySource").value})});toast("节假日数据源已保存")}
 async function syncCalendar(){try{await api("/api/calendar/sync",{method:"POST"});toast("节假日同步完成");loadExtras()}catch(e){toast(e.message,true)}}
@@ -519,6 +520,7 @@ bool AdminServer::Start() {
         {"/api/todos/*", HTTP_DELETE, TodoItemHandler, this},
         {"/api/weather", HTTP_GET, WeatherGetHandler, this}, {"/api/weather", HTTP_PUT, WeatherPutHandler, this},
         {"/api/weather-diagnostic", HTTP_GET, WeatherDiagnosticHandler, this},
+        {"/api/weather/refresh", HTTP_POST, WeatherRefreshHandler, this},
         {"/api/calendar", HTTP_GET, CalendarGetHandler, this}, {"/api/calendar", HTTP_PUT, CalendarPutHandler, this},
         {"/api/calendar/sync", HTTP_POST, CalendarSyncHandler, this},
         {"/api/api-token", HTTP_GET, ApiTokenHandler, this}, {"/api/api-token", HTTP_POST, ApiTokenHandler, this},
@@ -735,6 +737,12 @@ esp_err_t AdminServer::WeatherPutHandler(httpd_req_t* req) {
 esp_err_t AdminServer::WeatherDiagnosticHandler(httpd_req_t* req) {
     if (!Self(req)->IsAuthorized(req, false)) return Error(req, 401, "未登录");
     return Json(req, WeatherManager::getInstance().GetDiagnosticJson());
+}
+
+esp_err_t AdminServer::WeatherRefreshHandler(httpd_req_t* req) {
+    if (!Self(req)->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    WeatherManager::getInstance().RequestRefresh();
+    return Json(req, "{\"ok\":true}");
 }
 esp_err_t AdminServer::CalendarGetHandler(httpd_req_t* req) {
     if (!Self(req)->IsAuthorized(req, false)) return Error(req, 401, "未登录");

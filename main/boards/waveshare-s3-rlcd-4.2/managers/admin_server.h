@@ -62,4 +62,5 @@ private:
     static esp_err_t WifiDefaultHandler(httpd_req_t* req);
     static esp_err_t WifiConnectHandler(httpd_req_t* req);
     static esp_err_t WifiDisconnectHandler(httpd_req_t* req);
+    static esp_err_t WeatherRefreshHandler(httpd_req_t* req);
 };
