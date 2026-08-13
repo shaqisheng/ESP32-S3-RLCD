@@ -18,6 +18,10 @@
 
 ## 2. 开发原则
 
+0. **设计先行 + 烧录确认**（最高优先级，覆盖以下所有原则）：
+   - **涉及前端页面（设备屏 LVGL UI、后台管理界面）的修改，必须先出可视化设计稿（HTML mockup 或 ASCII 布局图）让用户确认后再编码**。不允许"边写边看效果"。参考 `docs/mockups/` 的现有 mockup。
+   - **编译和烧录设备前必须先告诉用户"我准备编译/烧录了"，得到明确同意（如"继续"/"烧"/"可以"）才执行**。不允许擅自 `idf.py build` 或 `esptool write_flash`。
+
 1. **小步、可验证、可回滚**。每次改动尽量能在 5 分钟内编译 + 真机验证。
 2. **优先复用现有安全基元**（`manager_safety.h`、`proxy_auth.h`），不要造轮子。
 3. **资源优先**：内部 SRAM 比 PSRAM 稀缺；Flash 比 CPU 稀缺。新增任何 LVGL 对象、字体、资源前先评估。
@@ -131,12 +135,13 @@ main/boards/waveshare-s3-rlcd-4.2/
 
 1. `clang-format -i` 改过的文件。
 2. `git diff --check`。
-3. 编译：`idf.py build`（确认 app 分区没超）。
+3. **告诉用户准备编译/烧录，得到明确同意后再执行**（§2.0 硬性要求）：
+   - 编译：`idf.py build`（确认 app 分区没超）。
+   - 真机烧录 + 观察 60 秒（搜索 `abort`/`reboot`/`ESP_ERR_NO_MEM`/`rlcd spi tx failed`）。
 4. 后台 JS 若改动：`node --check` 或在 `tests/host/rlcd_ui_source_contract_test.py` 里加新契约并跑通。
-5. 真机烧录 + 观察 60 秒（搜索 `abort`/`reboot`/`ESP_ERR_NO_MEM`/`rlcd spi tx failed`）。
-6. 更新 `DEVELOPMENT_LOG.md`。
-7. 架构或核心决策变化时同步 `ARCHITECTURE.md`。
-8. 新增功能/路由时同步 `PROJECT_CONTEXT.md` §5.5。
+5. 更新 `DEVELOPMENT_LOG.md`。
+6. 架构或核心决策变化时同步 `ARCHITECTURE.md`。
+7. 新增功能/路由时同步 `PROJECT_CONTEXT.md` §5.5。
 
 ---
 
