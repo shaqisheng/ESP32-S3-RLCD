@@ -133,6 +133,7 @@ private:
     std::array<lv_obj_t*, 4> quota_logo_images_{};
     std::array<lv_obj_t*, 4> quota_logo_fallback_labels_{};
     std::array<lv_obj_t*, 4> quota_name_labels_{};
+    std::array<lv_obj_t*, 4> quota_warn_labels_{};   // 右上角红色警告标（账号刷新失败时显示）
     std::array<std::array<lv_obj_t*, 2>, 4> quota_tier_labels_{};
     std::array<std::array<lv_obj_t*, 2>, 4> quota_bars_{};
     size_t quota_subpage_ = 0;

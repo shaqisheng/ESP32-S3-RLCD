@@ -194,6 +194,19 @@ void CustomLcdDisplay::SetupQuotaUI() {
         lv_label_set_long_mode(quota_name_labels_[i], LV_LABEL_LONG_DOT);
         lv_label_set_text(quota_name_labels_[i], "--");
 
+        // 右上角红色警告标（账号刷新失败时显示）
+        quota_warn_labels_[i] = lv_label_create(card);
+        lv_obj_set_size(quota_warn_labels_[i], 20, 18);
+        lv_obj_set_pos(quota_warn_labels_[i], 168, 2);
+        lv_obj_set_style_bg_color(quota_warn_labels_[i], lv_color_hex(0xb93127), 0);
+        lv_obj_set_style_bg_opa(quota_warn_labels_[i], LV_OPA_COVER, 0);
+        lv_obj_set_style_text_color(quota_warn_labels_[i], lv_color_white(), 0);
+        lv_obj_set_style_text_font(quota_warn_labels_[i], &font_puhui_14_1, 0);
+        lv_obj_set_style_text_align(quota_warn_labels_[i], LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_radius(quota_warn_labels_[i], 2, 0);
+        lv_label_set_text(quota_warn_labels_[i], "!");
+        lv_obj_add_flag(quota_warn_labels_[i], LV_OBJ_FLAG_HIDDEN);
+
         // Reuse the second slot in the bar array for the dominant numeric label;
         // this keeps CustomLcdDisplay's object layout compatible with existing code.
         quota_bars_[i][1] = lv_label_create(card);
@@ -254,7 +267,9 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
         rlcd::FormatAdminAddress(WifiManager::GetInstance().GetIpAddress());
     lv_label_set_text(quota_admin_label_, admin_address.c_str());
 
-    time_t refreshed = manager.GetLastAllSuccessAt();
+    // 用"最近一次刷新完成时间"而不是"全部成功时间"——
+    // 避免某一个账号失败导致时间戳永远停更，误导用户以为没在刷。
+    time_t refreshed = manager.GetLastRefreshCompletedAt();
     if (refreshed > 1700000000) {
         const int64_t age = std::max<int64_t>(0, time(nullptr) - refreshed);
         if (manager.IsRefreshing()) {
@@ -345,9 +360,14 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
             lv_obj_add_flag(quota_logo_images_[slot], LV_OBJ_FLAG_HIDDEN);
             lv_obj_remove_flag(quota_logo_fallback_labels_[slot], LV_OBJ_FLAG_HIDDEN);
         }
-        snprintf(text, sizeof(text), "%s%s", card.name.c_str(),
-                 (card.stale || !card.error.empty()) ? "  !" : "");
+        snprintf(text, sizeof(text), "%s", card.name.c_str());
         lv_label_set_text(quota_name_labels_[slot], text);
+        // 失败/旧数据显示右上角红色警告标
+        if (!card.error.empty() || card.stale) {
+            lv_obj_remove_flag(quota_warn_labels_[slot], LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(quota_warn_labels_[slot], LV_OBJ_FLAG_HIDDEN);
+        }
 
         if (card.tiers.empty()) {
             lv_label_set_text(quota_bars_[slot][1], "--");

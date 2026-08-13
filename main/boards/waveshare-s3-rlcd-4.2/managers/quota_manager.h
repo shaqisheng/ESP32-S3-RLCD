@@ -49,6 +49,9 @@ public:
     std::vector<QuotaPageSetting> GetPageSettings() const;
     uint32_t GetRevision() const { return revision_.load(); }
     int64_t GetLastAllSuccessAt() const;
+    // 最近一次刷新完成时间（不管成败）。比 last_all_success_at_ 更适合 UI 显示
+    // "上次更新时间"——不会因为某一个账号失败就停更时间戳。
+    int64_t GetLastRefreshCompletedAt() const { return last_refresh_completed_at_; }
     bool IsRefreshing() const { return refreshing_.load(); }
     uint32_t GetRefreshIntervalMinutes() const;
     bool SetRefreshIntervalMinutes(uint32_t minutes, std::string& error);
@@ -97,6 +100,7 @@ private:
     std::atomic<bool> refreshing_{false};
     TaskHandle_t task_ = nullptr;
     int64_t last_all_success_at_ = 0;
+    int64_t last_refresh_completed_at_ = 0;  // 最近一次刷新完成（不管成败）
     uint32_t refresh_interval_minutes_ = 5;
     // AI 页显示配置（NVS quota namespace 持久化）
     uint8_t cards_per_page_ = 4;          // 1-4，每屏几张卡片

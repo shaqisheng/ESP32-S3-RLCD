@@ -535,6 +535,7 @@ void QuotaManager::RefreshAll() {
         std::lock_guard<std::mutex> lock(mutex_);
         cards_ = std::move(next);
         if (all_ok && has_enabled) last_all_success_at_ = time(nullptr);
+        last_refresh_completed_at_ = time(nullptr);  // 刷新完成就更新（不管成败）
         revision_++;
     }
     if (all_ok && has_enabled) {
@@ -858,6 +859,7 @@ std::string QuotaManager::GetStatusJson() const {
     std::lock_guard<std::mutex> lock(mutex_);
     cJSON* root = cJSON_CreateObject(); cJSON_AddBoolToObject(root, "refreshing", refreshing_.load());
     cJSON_AddNumberToObject(root, "last_all_success_at", static_cast<double>(last_all_success_at_));
+    cJSON_AddNumberToObject(root, "last_refresh_completed_at", static_cast<double>(last_refresh_completed_at_));
     cJSON_AddNumberToObject(root, "refresh_interval_minutes", refresh_interval_minutes_);
     cJSON_AddNumberToObject(root, "revision", revision_.load()); cJSON* array = cJSON_AddArrayToObject(root, "items");
     for (const auto& card : cards_) { cJSON* item = cJSON_CreateObject(); cJSON_AddNumberToObject(item, "id", card.id);
