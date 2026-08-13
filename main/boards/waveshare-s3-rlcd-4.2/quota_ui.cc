@@ -280,7 +280,12 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
     const size_t per_page = qm.GetCardsPerPage();  // 1-4
     const size_t page_start = quota_subpage_ * per_page;
     const size_t visible_count = empty ? 0 : std::min<size_t>(per_page, cards.size() - page_start);
+    // 先隐藏所有 4 张卡片，再按需显示——否则上次渲染留下的卡片会叠加显示
+    for (size_t slot = 0; slot < 4; ++slot) {
+        lv_obj_add_flag(quota_cards_[slot], LV_OBJ_FLAG_HIDDEN);
+    }
     for (size_t slot = 0; slot < visible_count; ++slot) {
+        lv_obj_remove_flag(quota_cards_[slot], LV_OBJ_FLAG_HIDDEN);
         int x = 6, y = 54, width = 388, height = 240;
         if (visible_count == 2) {
             width = 191;
