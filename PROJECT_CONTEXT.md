@@ -37,7 +37,7 @@
 ### 1.4 主要功能模块
 
 - **小智语音框架**（上游通用）：协议（WebSocket 或 MQTT+UDP）、音频编解码、MCP 工具、OTA。
-- **板级显示**：综合页、日历页、七日天气页、AI 额度页（共 4 页）。
+- **板级显示**：综合页、日历页、七日天气页、AI 额度页、待办页（共 5 页）。
 - **板级后台**：内嵌 HTTP 服务器 + 单页前端，账号/页面/天气/日历/待办/Token 全配置。
 - **板级数据管理器**：Quota / Weather / Calendar / Todo / Sensor / Sdcard / QuotaProxy。
 
@@ -48,7 +48,7 @@
 | 维度 | 目标 |
 |---|---|
 | 产品形态 | 桌面常驻单色信息屏 + 局域网管理 + 少量上游 HTTPS 请求 |
-| 用户体验 | 综合/日历/天气/AI 四页可切换；USER 单击切页、双击刷新、长按滚动系统信息 |
+| 用户体验 | 综合/日历/七日天气/AI 额度/待办五页可切换；USER 单击切页、双击刷新、长按滚动系统信息；BOOT 单击按当前页上下文分发（综合页对话/AI 页刷额度/天气页刷天气） |
 | 可用性 | 网络短暂失败时仍可读（天气/额度保留最后有效快照） |
 | 维护性 | 局域网后台完全内嵌，无 CDN 依赖 |
 | 安全性 | 后台仅在可信局域网使用；明文 HTTP 禁止暴露公网；密钥只写不回显 |
@@ -171,8 +171,8 @@ xiaozhi-esp32/
 
 ### 5.2 显示层
 
-- **`custom_lcd_display.{h,cc}`**（564 行）：4 页枚举 `MODE_OVERVIEW/CALENDAR/FORECAST/QUOTA`。构造时只创建 `SetupWeatherUI/CalendarUI/ForecastUI/QuotaUI`，**不创建 music/pomodoro 页**。页面切换由 `QuotaManager::GetPageSettings()` 驱动，AI 子页每 10 秒自动翻页。`.h` 里 `music_page_`/`pomodoro_page_` 字段已无意义（遗留）。
-- **UI 文件**：`weather_ui.cc`（综合页）、`calendar_ui.cc`（月历）、`forecast_ui.cc`（七日天气）、`quota_ui.cc`（AI 卡片）**全部在用**。`music_ui.cc`、`pomodoro_ui.cc` 已废弃，但**仍被 CMake glob 编译**。
+- **`custom_lcd_display.{h,cc}`**（564 行）：5 页枚举 `MODE_OVERVIEW/CALENDAR/FORECAST/QUOTA/TODO`。构造时只创建 `SetupWeatherUI/CalendarUI/ForecastUI/QuotaUI/TodoUI`，**不创建 music/pomodoro 页**。页面切换由 `QuotaManager::GetPageSettings()` 驱动，AI 子页翻页间隔可配（默认 10 秒）。`.h` 里 `music_page_`/`pomodoro_page_` 字段已无意义（遗留）。
+- **UI 文件**：`weather_ui.cc`（综合页）、`calendar_ui.cc`（月历）、`forecast_ui.cc`（七日天气）、`quota_ui.cc`（AI 卡片）、`todo_ui.cc`（待办页）**全部在用**。`music_ui.cc`、`pomodoro_ui.cc` 已废弃，但**仍被 CMake glob 编译**。
 - **`data_update_task.cc`**（633 行）：周期任务，更新时间/传感器/电池/Wi-Fi/AI 状态/天气/日历/待办；含番茄钟刷分支（实际不执行，因番茄钟状态恒 IDLE 且 `pomo_*_label_` 均为 nullptr）。
 - **`rlcd_driver.{h,cc}`**：SPI 驱动 + PSRAM 帧缓冲 + LUT；按 1 KB 分片、`ESP_ERR_NO_MEM` 重试 3 次。
 
@@ -204,7 +204,9 @@ xiaozhi-esp32/
 | assets | 0xA00000 | 0x5C0000 | ~5.75 MB（比默认 16m.csv 少 256K，让给 quota_nvs） |
 | quota_nvs | 0xFC0000 | 0x40000 | 256 KB，admin password/api_token/quota 配置/额度缓存 |
 
-### 5.5 API 端点（`AdminServer`，28 条）
+### 5.5 API 端点（`AdminServer`，约 40 条）
+
+完整路由表（含 2026-08 新增的 Wi-Fi 管理、屏幕截图、单账号刷新、AI 页显示配置等）以 `docs/功能文档.md` §8.3 为准。核心端点：
 
 ```
 GET    /                      首页
@@ -212,7 +214,7 @@ GET    /admin                 同 /，后台入口别名
 POST   /api/setup             首次设置密码
 POST   /api/login             登录，返回 sid Cookie + csrf
 POST   /api/logout            登出
-POST   /api/refresh           手动触发额度刷新
+POST   /api/refresh           手动触发额度刷新（/api/refresh-one 单账号）
 POST   /api/calendar/sync     同步节假日（注意：同步阻塞 HTTP handler）
 POST   /api/proxy-diagnostic  代理诊断
 POST   /api/api-token         生成/重置 Todo Bearer Token
@@ -221,11 +223,14 @@ GET    /api/weather-diagnostic
 GET/PUT /api/pages            页面顺序与启停
 GET/PUT /api/quotas           额度账号 CRUD（PUT 不回显 secret）
 GET/PUT /api/refresh-interval 刷新周期（1-60 分钟）
-GET/PUT /api/weather          QWeather/Amap 配置（amap_key 不回显）
+GET/PUT /api/quota-display    AI 页显示配置（每屏卡数/翻页/固定页码）
+GET/PUT /api/weather          高德城市与 Key 配置（amap_key 不回显）
 GET/PUT /api/calendar         节假日源
 GET/PUT /api/api-token        读取/写入 token
-GET/PUT /api/device           设备配置
-POST   /api/display/switch    立即切换显示页面（mode: toggle/overview/calendar/forecast/quota）
+GET/PUT /api/device           设备信息 / 音量
+POST   /api/display/switch    立即切换显示页面
+GET    /api/display/screenshot 屏幕截图
+GET/POST/PUT/DELETE /api/wifi*  Wi-Fi 管理（列表/新增/默认/切换/断开/AP/删除）
 GET/POST      /api/todos              待办列表
 GET/PUT/DELETE /api/todos/{id}        单条 CRUD
 ```
@@ -236,7 +241,7 @@ GET/PUT/DELETE /api/todos/{id}        单条 CRUD
 
 ### 6.1 已完成且稳定
 
-- 综合页 / 日历页 / 七日天气页 / AI 额度页四页 UI
+- 综合页 / 日历页 / 七日天气页 / AI 额度页 / 待办页五页 UI
 - 后台管理（账号/页面/天气/日历/待办/Token）
 - AI 额度自动刷新 + stale 缓存 + 每账号代理
 - Todo CRUD + Bearer Token + 旧 memo 迁移
@@ -283,14 +288,16 @@ GET/PUT/DELETE /api/todos/{id}        单条 CRUD
 
 | 文档 | 状态 |
 |---|---|
-| `README.md` / `README_zh.md` / `README_ja.md` | 上游通用描述，**与本板无直接关系** |
+| `README.md` | **已重写为本 fork 的中文项目 README**（2026-08-13），准确 |
+| `README_zh.md` / `README_ja.md` | **已删除**（纯上游翻译版，2026-08-13 移除） |
+| `docs/功能文档.md` | **完整功能清单**（2026-08-13 建立，含 5 页、后台路由表、数据源、安全设计），准确 |
 | `PROJECT_HANDOFF.md` | 迁移前快照，**部分过时**：版本 `3.6.5`（现 `2.2.2`）、目录 `codex/esp32/`、远程 `ZhouhaoJiang/`、构建大小数字均与当前不符；但其架构图、风险清单、技术决策仍可参考 |
-| `docs/waveshare-s3-rlcd-4.2-project-handbook.md` | **本板权威手册**（2026-08-10 更新） |
+| `docs/waveshare-s3-rlcd-4.2-project-handbook.md` | 本板手册（2026-08-10），**§6.1 天气部分过时**（现为高德实时 + Open-Meteo 七日，非 QWeather），其余烧录/排障经验仍可参考 |
 | `docs/quota-admin-design.md` | **部分过时**：仍按音乐/番茄钟页面描述 |
 | `docs/custom-board.md` / `docs/mcp-*.md` / `docs/mqtt-udp.md` / `docs/websocket.md` | 上游通用，准确 |
 | `docs/code_style.md` | 准确，clang-format（Google 基础，4 空格，行宽 100） |
 | `docs/superpowers/plans/` | 5 份 RLCD 迭代计划，最新 `2026-08-11` |
-| `main/boards/waveshare-s3-rlcd-4.2/README.md` | 本板硬件说明（"天气站"定位，较早期） |
+| `main/boards/waveshare-s3-rlcd-4.2/README.md` | **已重写**（2026-08-13）：硬件、按键、构建烧录、故障排查，准确 |
 
 ---
 
