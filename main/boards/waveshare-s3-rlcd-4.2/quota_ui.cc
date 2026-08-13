@@ -80,6 +80,18 @@ void FormatResetAbsolute(int64_t reset_at, char* out, size_t size) {
     }
 }
 
+// 重置绝对时间紧凑格式："15:30"（HH:mm，24 小时制）。
+void FormatResetHHMM(int64_t reset_at, char* out, size_t size) {
+    if (reset_at <= 0) {
+        out[0] = '\0';
+        return;
+    }
+    time_t t = static_cast<time_t>(reset_at);
+    struct tm info;
+    localtime_r(&t, &info);
+    snprintf(out, size, "%02d:%02d", info.tm_hour, info.tm_min);
+}
+
 // 找 5 小时短窗口 tier（label == "5H"）。没有返回 SIZE_MAX。
 size_t FindShortTier(const QuotaCard& card) {
     for (size_t i = 0; i < card.tiers.size(); ++i) {
@@ -389,11 +401,13 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
         if (primary_remaining >= 0) {
             snprintf(text, sizeof(text), "%d%%", primary_remaining);
             lv_label_set_text(quota_bars_[slot][1], text);
-            // 5H 时追加倒计时（如 "5H 剩余 2h30m"），让用户感知窗口何时刷新
+            // 5H 时追加倒计时（如 "5H 剩余 15:30 2h30m"），让用户感知窗口何时刷新
             if (primary.label == "5H" && primary.reset_at > 0) {
-                char countdown[32];
+                char when_hhmm[16], countdown[32];
+                FormatResetHHMM(primary.reset_at, when_hhmm, sizeof(when_hhmm));
                 FormatResetCountdown(primary.reset_at, countdown, sizeof(countdown));
-                snprintf(text, sizeof(text), "%s 剩余 %s", primary.label.c_str(), countdown);
+                snprintf(text, sizeof(text), "%s 剩余 %s %s", primary.label.c_str(),
+                         when_hhmm, countdown);
             } else {
                 snprintf(text, sizeof(text), "%s 剩余", primary.label.c_str());
             }
