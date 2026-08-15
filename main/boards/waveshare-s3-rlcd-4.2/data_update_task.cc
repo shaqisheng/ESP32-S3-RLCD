@@ -222,7 +222,21 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
         if (can_run_background_requests && idle_long_enough) {
             auto& weather_manager = WeatherManager::getInstance();
             const bool weather_requested = weather_manager.TakeRefreshRequest();
-            const uint32_t weather_interval_ms = weather_manager.GetRefreshIntervalMinutes() * 60 * 1000;
+            // 省电模式下天气间隔强制拉到 60 分钟（退出后 PowerSaveManager::IsActive
+            // 变 false，下次判断时自动恢复原间隔——不需要恢复逻辑）
+            const bool in_power_save = PowerSaveManager::GetInstance().IsActive();
+            const uint32_t base_interval_ms = weather_manager.GetRefreshIntervalMinutes() * 60 * 1000;
+            const uint32_t weather_interval_ms =
+                in_power_save
+                    ? PowerSaveManager::kPowerSaveRefreshMinutes * 60 * 1000
+                    : base_interval_ms;
+            // 临时诊断：每 30 秒打一次当前天气间隔，验证省电模式切换
+            static uint32_t last_log_ms = 0;
+            if (now_ms - last_log_ms >= 30000) {
+                last_log_ms = now_ms;
+                ESP_LOGI(TAG, "Weather interval status: power_save=%d interval=%lu min",
+                         in_power_save, (unsigned long)(weather_interval_ms / 60000));
+            }
             const uint32_t retry_interval_ms = 5 * 60 * 1000;
             const uint32_t due_interval_ms = last_weather_request_ok ? weather_interval_ms : retry_interval_ms;
             if (weather_requested || last_weather_update_ms == 0 ||
