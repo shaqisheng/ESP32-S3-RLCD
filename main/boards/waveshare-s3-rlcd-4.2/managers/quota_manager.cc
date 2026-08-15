@@ -454,13 +454,22 @@ bool QuotaManager::RefreshOne(const Entry& entry, QuotaCard& card, bool& transie
     card.checked_at = time(nullptr);
     card.tiers.clear();
     if (entry.provider == "manual") {
-        QuotaTier tier;
-        tier.label = entry.label.empty() ? "额度" : entry.label;
-        tier.total = entry.manual_total;
-        tier.remaining = entry.manual_remaining;
-        tier.unit = entry.unit;
-        tier.used_percent = tier.total > 0 ? ClampPercent((tier.total - tier.remaining) * 100 / tier.total) : -1;
-        card.tiers.push_back(tier);
+        // 两个 tier：5H 短窗口 + 周长窗口，都是剩余百分比（0-100）
+        QuotaTier short_tier;
+        short_tier.label = "5H";
+        short_tier.total = 100;
+        short_tier.remaining = entry.manual_5h_remaining;
+        short_tier.used_percent = ClampPercent(100 - entry.manual_5h_remaining);
+        short_tier.unit = "%";
+        card.tiers.push_back(short_tier);
+
+        QuotaTier weekly_tier;
+        weekly_tier.label = "周";
+        weekly_tier.total = 100;
+        weekly_tier.remaining = entry.manual_weekly_remaining;
+        weekly_tier.used_percent = ClampPercent(100 - entry.manual_weekly_remaining);
+        weekly_tier.unit = "%";
+        card.tiers.push_back(weekly_tier);
         return true;
     }
     std::string url = entry.base_url;
@@ -611,8 +620,19 @@ void QuotaManager::Load() {
         e.account_id = JsonString(item, "account_id"); e.unit = JsonString(item, "unit");
         e.label = JsonString(item, "label"); e.total_field = JsonString(item, "total_field");
         e.remaining_field = JsonString(item, "remaining_field");
+        // 新字段优先；没有则从旧 manual_total/remaining 迁移（remaining/total*100 作为 weekly）
+        e.manual_5h_remaining = static_cast<int>(JsonNumber(item, "manual_5h_remaining"));
+        e.manual_weekly_remaining = static_cast<int>(JsonNumber(item, "manual_weekly_remaining"));
         e.manual_total = JsonNumber(item, "manual_total");
         e.manual_remaining = JsonNumber(item, "manual_remaining");
+        if (e.manual_5h_remaining == 0 && e.manual_weekly_remaining == 0 &&
+            e.manual_total > 0) {
+            // 旧数据迁移：weekly = remaining/total*100，5H 默认同 weekly
+            const int pct = static_cast<int>(std::clamp(
+                static_cast<int>(lround(e.manual_remaining * 100 / e.manual_total)), 0, 100));
+            e.manual_5h_remaining = pct;
+            e.manual_weekly_remaining = pct;
+        }
         cJSON_Delete(item);
         if (IsProvider(e.provider)) entries_.push_back(e);
     }
@@ -716,6 +736,9 @@ bool QuotaManager::SaveEntriesLocked(std::string& error) {
         cJSON_AddStringToObject(item, "unit", e.unit.c_str()); cJSON_AddStringToObject(item, "label", e.label.c_str());
         cJSON_AddStringToObject(item, "total_field", e.total_field.c_str());
         cJSON_AddStringToObject(item, "remaining_field", e.remaining_field.c_str());
+        cJSON_AddNumberToObject(item, "manual_5h_remaining", e.manual_5h_remaining);
+        cJSON_AddNumberToObject(item, "manual_weekly_remaining", e.manual_weekly_remaining);
+        // 旧字段保留以兼容（新加载逻辑只在两个新字段都为 0 时才迁移）
         cJSON_AddNumberToObject(item, "manual_total", e.manual_total);
         cJSON_AddNumberToObject(item, "manual_remaining", e.manual_remaining);
         char* json = cJSON_PrintUnformatted(item);
@@ -769,6 +792,8 @@ std::string QuotaManager::GetConfigJson() const {
         cJSON_AddBoolToObject(item, "has_secret", !e.secret.empty()); cJSON_AddStringToObject(item, "account_id", e.account_id.c_str());
         cJSON_AddStringToObject(item, "unit", e.unit.c_str()); cJSON_AddStringToObject(item, "label", e.label.c_str());
         cJSON_AddStringToObject(item, "total_field", e.total_field.c_str()); cJSON_AddStringToObject(item, "remaining_field", e.remaining_field.c_str());
+        cJSON_AddNumberToObject(item, "manual_5h_remaining", e.manual_5h_remaining);
+        cJSON_AddNumberToObject(item, "manual_weekly_remaining", e.manual_weekly_remaining);
         cJSON_AddNumberToObject(item, "manual_total", e.manual_total); cJSON_AddNumberToObject(item, "manual_remaining", e.manual_remaining);
         auto card = std::find_if(cards_.begin(), cards_.end(), [&](const QuotaCard& value) { return value.id == e.id; });
         if (!e.enabled) cJSON_AddStringToObject(item, "status", "disabled");
@@ -824,6 +849,15 @@ bool QuotaManager::ApplyConfigJson(const char* json, std::string& error) {
         e.unit = JsonString(item, "unit"); e.label = JsonString(item, "label");
         e.total_field = JsonString(item, "total_field"); e.remaining_field = JsonString(item, "remaining_field");
         e.manual_total = JsonNumber(item, "manual_total"); e.manual_remaining = JsonNumber(item, "manual_remaining");
+        // manual 两个百分比字段（0-100 校验）
+        e.manual_5h_remaining = static_cast<int>(JsonNumber(item, "manual_5h_remaining"));
+        e.manual_weekly_remaining = static_cast<int>(JsonNumber(item, "manual_weekly_remaining"));
+        if (e.provider == "manual") {
+            if (e.manual_5h_remaining < 0 || e.manual_5h_remaining > 100 ||
+                e.manual_weekly_remaining < 0 || e.manual_weekly_remaining > 100) {
+                cJSON_Delete(root); error = "手动额度剩余必须为 0-100"; return false;
+            }
+        }
         std::string incoming = JsonString(item, "secret");
         bool clear = JsonBool(item, "clear_secret", false);
         auto old = std::find_if(entries_.begin(), entries_.end(), [&](const Entry& old_e) { return old_e.id == e.id; });

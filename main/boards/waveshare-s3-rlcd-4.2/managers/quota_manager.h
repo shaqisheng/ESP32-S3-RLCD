@@ -89,6 +89,10 @@ private:
         std::string label;
         std::string total_field;
         std::string remaining_field;
+        // manual provider 专用：两个剩余百分比（0-100）
+        int manual_5h_remaining = 0;       // 5 小时短窗口剩余 %
+        int manual_weekly_remaining = 0;   // 周/长期剩余 %
+        // 兼容旧字段（从 NVS 加载时迁移到上面两个）
         double manual_total = 0;
         double manual_remaining = 0;
     };

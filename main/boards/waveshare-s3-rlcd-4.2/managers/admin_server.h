@@ -67,4 +67,5 @@ private:
     static esp_err_t WifiApStopHandler(httpd_req_t* req);
     static esp_err_t QuotaDisplayHandler(httpd_req_t* req);
     static esp_err_t QuotaRefreshOneHandler(httpd_req_t* req);
+    static esp_err_t PowerSaveHandler(httpd_req_t* req);
 };

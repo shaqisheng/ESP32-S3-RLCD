@@ -20,6 +20,7 @@
 #include "managers/sensor_manager.h"
 #include "managers/sdcard_manager.h"
 #include "managers/quota_manager.h"
+#include "managers/power_save_manager.h"
 #include "managers/admin_server.h"
 
 // 声明小智字体（用于系统信息显示时临时切换字体大小）
@@ -110,6 +111,9 @@ private:
             if (display_ && display_->IsQuotaMode()) {
                 ESP_LOGI(TAG, "BOOT 单击（AI 页）：刷新账号额度");
                 QuotaManager::GetInstance().RequestRefresh();
+                // 立刻重绘 AI 页，让"正在刷新"立刻显示（QuotaManager 的 refreshing_
+                // 状态在 Run 循环里设置，需要一次 render 才能被 quota_refresh_label_ 读到）
+                display_->RenderQuotaPageInternal();
                 return;
             }
             if (display_ && display_->IsForecastMode()) {
@@ -748,6 +752,7 @@ public:
         InitializeButtons();     
         InitializeTools();
         QuotaManager::GetInstance().Init();
+        PowerSaveManager::GetInstance().Init();
         InitializeLcdDisplay();
     }
 

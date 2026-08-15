@@ -18,6 +18,7 @@
 #include <nvs.h>
 
 #include "quota_manager.h"
+#include "power_save_manager.h"
 #include "sdcard_manager.h"
 #include "sensor_manager.h"
 #include "ssid_manager.h"
@@ -123,6 +124,15 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
+<section class="panel"><h2>省电模式</h2>
+<p class="hint">低电量 / 手动 / 夜间时段 自动进入省电模式，降低刷新频率、Wi-Fi 功耗、CPU 频率和关闭语音唤醒。</p>
+<div class="manage-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>当前状态</label><div id="powerSaveStatus" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>进入原因</label><div id="powerSaveReason" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div>
+<div class="field" style="margin-top:12px"><label class="proxy-toggle"><input type="checkbox" id="powerSaveManual" onchange="savePowerSave()"> 手动启用省电模式</label></div>
+<div class="manage-grid" style="grid-template-columns:repeat(3,1fr)"><div class="field"><label>电池阈值（%）<input id="powerSaveThreshold" type="number" min="5" max="50" step="1"></label></div><div class="field"><label>夜间开始（时）<input id="powerSaveNightStart" type="number" min="0" max="23" step="1"></label></div><div class="field"><label>夜间结束（时）<input id="powerSaveNightEnd" type="number" min="0" max="23" step="1"></label></div></div>
+<div class="field"><label class="proxy-toggle"><input type="checkbox" id="powerSaveNightEnabled" onchange="savePowerSave()"> 启用夜间自动省电</label></div>
+<div class="toolbar" style="justify-content:flex-start"><button onclick="savePowerSave()">保存配置</button></div>
+<p class="hint">注：Phase 1 仅做状态显示和配置存储，Phase 2 才会真正降低刷新频率和功耗。</p>
+</section>
 <section class="panel"><h2>Wi-Fi 管理</h2>
 <p class="hint" style="margin:0 0 14px">管理已保存的 Wi-Fi 网络，支持添加/删除/设默认/切换。</p>
 <div class="manage-grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>当前连接</label><div id="wifiCurrent" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div><div class="field"><label>IP 地址</label><div id="wifiIp" class="mono" style="padding:8px;background:#faf9f3;border:1px solid var(--line)">--</div></div></div>
@@ -199,7 +209,7 @@ function showDash(){el("auth").classList.add("hidden");el("dashboard").classList
 async function boot(){try{var s=await api("/api/status");if(s.setup_required){showAuth(true);return}if(!s.authenticated){showAuth(false);return}csrf=s.csrf||"";showDash();await loadAll()}catch(e){showAuth(false)}}
 async function login(){var p=el("password").value;if(p.length<8){toast("密码至少 8 位",true);return}try{var d=await api(setupMode?"/api/setup":"/api/login",{method:"POST",body:JSON.stringify({password:p})});csrf=d.csrf||"";el("password").value="";showDash();await loadAll()}catch(e){toast(e.message,true)}}
 async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages");items=q.items||[];items.forEach(keyFor);pages=p.pages||[];editingKey="";dirty=false;el("saveQuotas").textContent="保存全部更改";renderPages();renderDisplaySwitches();renderQuotas();await loadExtras();await status()}
-async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";var wlr=w.last_refresh_completed_at||0;el("weatherLastRefresh").textContent=wlr>0?new Date(wlr*1000).toLocaleString():"尚未刷新";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;try{var qd=await api("/api/quota-display");el("quotaCardsPerPage").value=qd.cards_per_page||4;renderForcePageOptions();el("quotaAutoAdvance").value=qd.auto_advance_seconds||10;el("quotaForcePage").value=qd.force_page||0}catch(e){}await loadDevice();await loadWifi()}
+async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";var wlr=w.last_refresh_completed_at||0;el("weatherLastRefresh").textContent=wlr>0?new Date(wlr*1000).toLocaleString():"尚未刷新";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;try{var qd=await api("/api/quota-display");el("quotaCardsPerPage").value=qd.cards_per_page||4;renderForcePageOptions();el("quotaAutoAdvance").value=qd.auto_advance_seconds||10;el("quotaForcePage").value=qd.force_page||0}catch(e){}await loadDevice();await loadWifi();await loadPowerSave()}
 function memStatus(bytes,isInternal){var b=Number(bytes||0);var label,danger=false;if(isInternal){if(b<20*1024){label="危险";danger=true}else if(b<30*1024){label="紧张";danger=true}else{label="正常"}}else{if(b<512*1024){label="危险";danger=true}else if(b<2*1024*1024){label="紧张";danger=true}else{label="充足"}}var num=b>=1024*1024?(b/1024/1024).toFixed(1)+" MB":(b/1024).toFixed(1)+" KB";return{txt:label+" "+num,danger:danger}}
 function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=el(elId);e.textContent=s.txt;e.style.color=s.danger?"var(--bad)":""}
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
@@ -222,6 +232,9 @@ async function submitWifiModal(){var ssid=el("wifiModalSsid").value.trim(),pass=
 function prefillWifi(ssid){el("wifiModalSsid").value=ssid;el("wifiModal").classList.add("open");setTimeout(function(){el("wifiModalPassword").focus()},50)}
 async function wifiApStart(btn){if(!confirm("启用 AP 热点将断开当前 Wi-Fi station，浏览器会失去连接。继续？"))return;var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var d=await api("/api/wifi/ap/start",{method:"POST"});el("wifiApInfo").textContent="热点 SSID: "+(d.ssid||"?")+" · 访问: "+(d.url||"?");el("wifiApInfo").style.display="block";toast("AP 热点已启用");btn.textContent=orig;btn.disabled=false}catch(e){btn.textContent=orig;btn.disabled=false;toast(e.message,true)}}
 async function wifiApStop(){try{await api("/api/wifi/ap/stop",{method:"POST"});el("wifiApInfo").style.display="none";toast("AP 热点已停止")}catch(e){toast(e.message,true)}}
+// 省电模式
+async function loadPowerSave(){try{var d=await api("/api/power-save");el("powerSaveStatus").textContent=d.active?"已启用":"已关闭";el("powerSaveReason").textContent=d.active?(d.reason||"--"):"--";el("powerSaveManual").checked=d.manual_override||false;el("powerSaveThreshold").value=d.battery_threshold||20;el("powerSaveNightStart").value=d.night_start_hour||23;el("powerSaveNightEnd").value=d.night_end_hour||7;el("powerSaveNightEnabled").checked=d.night_enabled||false}catch(e){}}
+async function savePowerSave(){try{await api("/api/power-save",{method:"PUT",body:JSON.stringify({manual_override:el("powerSaveManual").checked,battery_threshold:Number(el("powerSaveThreshold").value),night_start_hour:Number(el("powerSaveNightStart").value),night_end_hour:Number(el("powerSaveNightEnd").value),night_enabled:el("powerSaveNightEnabled").checked})});toast("省电配置已保存")}catch(e){toast(e.message,true)}}
 async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();var url=URL.createObjectURL(blob);el("screenshotImg").src=url;el("screenshotLink").href=url;el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
 function renderDisplaySwitches(){var sorted=pages.slice().sort(function(a,b){return a.order-b.order});var h="";sorted.forEach(function(p){if(p.enabled)h+='<button onclick="switchPage(\''+p.id+'\')">'+(names[p.id]||p.id)+'</button>'});h+='<button onclick="switchPage(\'toggle\')">下一页</button>';el("displaySwitches").innerHTML=h}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
@@ -521,7 +534,7 @@ bool AdminServer::Start() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 8080;
     config.ctrl_port = 32769;
-    config.max_uri_handlers = 40;
+    config.max_uri_handlers = 48;
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.stack_size = 8192;
     config.lru_purge_enable = true;
@@ -552,6 +565,8 @@ bool AdminServer::Start() {
         {"/api/calendar/sync", HTTP_POST, CalendarSyncHandler, this},
         {"/api/api-token", HTTP_GET, ApiTokenHandler, this}, {"/api/api-token", HTTP_POST, ApiTokenHandler, this},
         {"/api/device", HTTP_GET, DeviceHandler, this}, {"/api/device", HTTP_PUT, DeviceHandler, this},
+        {"/api/power-save", HTTP_GET, PowerSaveHandler, this},
+        {"/api/power-save", HTTP_PUT, PowerSaveHandler, this},
         {"/api/display/switch", HTTP_POST, DisplaySwitchHandler, this},
         {"/api/display/screenshot", HTTP_GET, ScreenshotHandler, this},
         {"/api/wifi", HTTP_GET, WifiListHandler, this},
@@ -759,6 +774,39 @@ esp_err_t AdminServer::QuotaDisplayHandler(httpd_req_t* req) {
     if (!QuotaManager::GetInstance().SetDisplayConfig(cards, auto_adv, force, error)) {
         return Error(req, 400, error);
     }
+    return Json(req, "{\"ok\":true}");
+}
+
+esp_err_t AdminServer::PowerSaveHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    auto& psm = PowerSaveManager::GetInstance();
+    if (req->method == HTTP_GET) {
+        if (!self->IsAuthorized(req, false)) return Error(req, 401, "未登录");
+        // 合并 status + config 返回
+        cJSON* status = cJSON_Parse(psm.GetStatusJson().c_str());
+        cJSON* config = cJSON_Parse(psm.GetConfigJson().c_str());
+        cJSON* root = cJSON_CreateObject();
+        if (status) {
+            cJSON* item = nullptr;
+            cJSON_ArrayForEach(item, status) cJSON_AddItemToObject(root, item->string, cJSON_Duplicate(item, true));
+            cJSON_Delete(status);
+        }
+        if (config) {
+            cJSON* item = nullptr;
+            cJSON_ArrayForEach(item, config) cJSON_AddItemToObject(root, item->string, cJSON_Duplicate(item, true));
+            cJSON_Delete(config);
+        }
+        char* raw = cJSON_PrintUnformatted(root);
+        std::string out = raw ? raw : "{}";
+        if (raw) cJSON_free(raw);
+        cJSON_Delete(root);
+        return Json(req, out);
+    }
+    // PUT
+    if (!self->IsAuthorized(req, true)) return Error(req, 401, "未登录");
+    std::string body, error;
+    if (!ReadBody(req, body)) return Error(req, 400, "请求无效");
+    if (!psm.ApplyConfigJson(body.c_str(), error)) return Error(req, 400, error);
     return Json(req, "{\"ok\":true}");
 }
 

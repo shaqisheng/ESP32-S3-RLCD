@@ -160,7 +160,7 @@ void CustomLcdDisplay::RefreshMemoDisplay() {
 void CustomLcdDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
     if (chat_status_label_ == nullptr && music_chat_status_label_ == nullptr) return;
-    if (!content || strlen(content) == 0) return;
+    if (!content) return;
 
     // 停止可能正在运行的滚动动画（系统信息或之前的 AI 滚动）
     lv_anim_delete(chat_status_label_, nullptr);
@@ -168,6 +168,16 @@ void CustomLcdDisplay::SetChatMessage(const char* role, const char* content) {
     // 停止系统信息滚动，恢复 DataUpdateTask 更新
     SetShowingSystemInfo(false);
     
+    // 空内容是上游的“清除消息”语义（DismissAlert / 音频通道关闭时都会
+    // 调 SetChatMessage("system", "")）。必须真正清空 label 并恢复正常布局，
+    // 否则错误提示（如“无法连接服务，请稍后再试”）会永久残留在小智区域。
+    if (strlen(content) == 0) {
+        lv_label_set_text(chat_status_label_, "");
+        lv_label_set_long_mode(chat_status_label_, LV_LABEL_LONG_WRAP);
+        lv_obj_align(chat_status_label_, LV_ALIGN_LEFT_MID, 64 + 20, 0);
+        return;
+    }
+
     // 设置文本内容
     lv_label_set_text(chat_status_label_, content);
     lv_label_set_long_mode(chat_status_label_, LV_LABEL_LONG_WRAP);

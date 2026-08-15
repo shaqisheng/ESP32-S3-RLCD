@@ -26,6 +26,8 @@
 #include "assets/lang_config.h"
 #include "managers/sensor_manager.h"
 #include "managers/weather_manager.h"
+#include "managers/power_save_manager.h"
+#include "managers/quota_manager.h"
 #include "managers/calendar_manager.h"
 #include "managers/manager_safety.h"
 #include "managers/pomodoro_manager.h"  // legacy state remains inert; no page/tool starts it
@@ -210,6 +212,11 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
             auto& weather_manager = WeatherManager::getInstance();
             if (weather_manager.IsRefreshing() && self->IsForecastMode()) {
                 self->MarkWeatherRefreshing();
+            }
+            // AI 页同理：刷新中立刻重绘显示"正在刷新…"
+            if (QuotaManager::GetInstance().IsRefreshing() && self->IsQuotaMode()) {
+                DisplayLockGuard lock(self);
+                self->RenderQuotaPageInternal();
             }
         }
         if (can_run_background_requests && idle_long_enough) {
@@ -407,6 +414,12 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
                         battery_cached = true;
                         last_battery_poll_ms = now_ms;
                     }
+                }
+
+                // 省电模式评估（每秒检查一次，进入/退出由 PowerSaveManager 管理）
+                if (battery_cached) {
+                    PowerSaveManager::GetInstance().Evaluate(
+                        cached_battery_level, cached_charging, timeinfo.tm_hour);
                 }
 
                 if (battery_cached) {

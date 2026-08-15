@@ -285,7 +285,7 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
     if (refreshed > 1700000000) {
         const int64_t age = std::max<int64_t>(0, time(nullptr) - refreshed);
         if (manager.IsRefreshing()) {
-            snprintf(text, sizeof(text), "正在刷新");
+            snprintf(text, sizeof(text), "正在刷新…");
         } else if (age < 60) {
             snprintf(text, sizeof(text), "刚刚更新");
         } else if (age < 3600) {
@@ -295,7 +295,7 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
             snprintf(text, sizeof(text), "%02d:%02d 更新", info.tm_hour, info.tm_min);
         }
     } else {
-        snprintf(text, sizeof(text), manager.IsRefreshing() ? "正在刷新" : "等待刷新");
+        snprintf(text, sizeof(text), manager.IsRefreshing() ? "正在刷新…" : "等待刷新");
     }
     lv_label_set_text(quota_refresh_label_, text);
 

@@ -181,7 +181,6 @@ private:
     void SetupQuotaUI();
     void SetupTodoUI();
     void ApplyDisplayMode();
-    void RenderQuotaPageInternal();
     void UpdateCalendarInternal(const struct tm& timeinfo);
     void UpdateWeatherDisplaysInternal();
     
@@ -196,6 +195,10 @@ public:
                   int width, int height, int offset_x, int offset_y,
                   bool mirror_x, bool mirror_y, bool swap_xy, spi_display_config_t spiconfig, spi_host_device_t spi_host = SPI3_HOST);
     ~CustomLcdDisplay();
+
+    // BOOT 单击 AI 页时立刻重绘，让"正在刷新"立刻显示（QuotaManager 的
+    // refreshing_ 状态需要一次 render 才能被 quota_refresh_label_ 读到）
+    void RenderQuotaPageInternal();
 
     // 获取 RLCD 驱动（供外部调用硬件方法，如对比度调节）
     RlcdDriver* rlcd() const { return rlcd_; }
