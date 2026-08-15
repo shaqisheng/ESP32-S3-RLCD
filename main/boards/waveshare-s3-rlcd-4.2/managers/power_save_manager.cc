@@ -58,13 +58,13 @@ void PowerSaveManager::SetActive(bool active, const char* reason) {
     if (active) {
         enter_at_.store(time(nullptr));
         ESP_LOGI(TAG, "进入省电模式：%s", reason);
-        // 1. 拉长 Quota 刷新间隔到 60 分钟
+        // 1. 拉长 Quota 刷新间隔到 60 分钟（只改运行时，不写 NVS——
+        // 避免覆盖用户在后台配置的刷新间隔，退出后从 NVS 恢复）
         auto& qm = QuotaManager::GetInstance();
         auto& wm = WeatherManager::getInstance();
         orig_quota_interval_minutes_ = qm.GetRefreshIntervalMinutes();
         orig_weather_interval_minutes_ = wm.GetRefreshIntervalMinutes();
-        std::string err;
-        qm.SetRefreshIntervalMinutes(kPowerSaveRefreshMinutes, err);
+        qm.SetRefreshIntervalMinutesRuntime(kPowerSaveRefreshMinutes);
         ESP_LOGI(TAG, "刷新间隔已拉长到 %d 分钟（原 quota=%d, weather=%d）",
                  (int)kPowerSaveRefreshMinutes,
                  (int)orig_quota_interval_minutes_,
@@ -88,10 +88,9 @@ void PowerSaveManager::SetActive(bool active, const char* reason) {
     } else {
         enter_at_.store(0);
         ESP_LOGI(TAG, "退出省电模式");
-        // 恢复 Quota 刷新间隔
+        // 恢复 Quota 刷新间隔（用运行时 setter 恢复原值，不动 NVS）
         if (orig_quota_interval_minutes_ > 0) {
-            std::string err;
-            QuotaManager::GetInstance().SetRefreshIntervalMinutes(orig_quota_interval_minutes_, err);
+            QuotaManager::GetInstance().SetRefreshIntervalMinutesRuntime(orig_quota_interval_minutes_);
             ESP_LOGI(TAG, "刷新间隔已恢复 quota=%d 分钟", (int)orig_quota_interval_minutes_);
         }
         // 恢复 Wi-Fi PS（用 BALANCED 而不是 LOW_POWER，平衡性能）

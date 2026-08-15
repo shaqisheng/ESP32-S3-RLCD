@@ -57,6 +57,10 @@ public:
     bool IsRefreshing() const { return refreshing_.load(); }
     uint32_t GetRefreshIntervalMinutes() const;
     bool SetRefreshIntervalMinutes(uint32_t minutes, std::string& error);
+    // 只改运行时间隔（不写 NVS）——省电模式用，避免覆盖用户配置
+    void SetRefreshIntervalMinutesRuntime(uint32_t minutes) {
+        refresh_interval_minutes_ = minutes;
+    }
 
     // AI 页显示配置
     uint8_t GetCardsPerPage() const { return cards_per_page_; }
