@@ -6,6 +6,32 @@
 
 ---
 
+## 2026-08-14 — 修复“无法连接服务”错误提示永久残留小智区域
+
+- **修改内容**：`custom_lcd_display.cc` `CustomLcdDisplay::SetChatMessage`——把原来的
+  `if (!content || strlen(content) == 0) return;` 改为：空内容时**真正清空** `chat_status_label_`
+  （停止滚动动画 + `SetShowingSystemInfo(false)` + 清空文本 + 恢复 WRAP/LEFT_MID 布局后 return）；
+  非空内容路径不变。
+- **修改原因**：用户反馈综合页小智区长期显示“无法连接服务，请稍后再试”，但实际已联网。
+  串口日志证实 MQTT 连接/激活完全正常（`MQTT: Connected to endpoint` → `Activation done`）。
+  根因：上游所有清除路径（`DismissAlert`、音频通道关闭）都靠 `SetChatMessage("system", "")`
+  传空串清空，而本板重写版直接丢弃空内容 → 任何一次瞬时连接失败的提示都会永久残留到重启。
+- **影响范围**：仅综合页小智区域文本的清除时机；对话结束/错误恢复后区域现在会正确清空；
+  不影响其他页面、API、NVS。
+- **测试结果**：
+  - idf.py build: ✅（app 分区余量 5%，0x3cd40）
+  - `git diff --check`: ✅
+  - 契约测试: ⚠️ 44/46；2 个失败为 HEAD 上既有（`68377eb` 等近期 AI 卡片提交未同步断言），与本次无关
+  - 真机烧录 + 串口 75s: ✅ 无 abort/reboot/NO_MEM/SPI 失败；MQTT 12s 连上
+  - 屏幕截图（`/api/display/screenshot`）: ✅ 综合页小智区正常显示“待命”，无残留错误文字
+  - 对话结束后区域自动清空: ⏳ 需用户实测（按 BOOT 对话 → 结束后区域应变空）
+  - 注意：本次烧录后 minimal sram 低至 3859（额度 TLS 刷新高峰期），属既有基线而非本次回归
+- **回滚方式**：`git revert` 本次提交
+- **关联文档**：无架构变化；附带发现（未修，另立任务）：①后台 3 条 Wi-Fi 路由注册失败
+  （`ESP_ERR_HTTPD_HANDLERS_FULL`，max_uri_handlers 需调大）②2 个契约测试断言过期
+
+---
+
 ## 2026-08-13 — 重写项目 README + 新建功能文档（文档对齐代码现状）
 
 - **修改内容**（纯文档，无代码改动）：
