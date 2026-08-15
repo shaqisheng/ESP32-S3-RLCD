@@ -40,6 +40,8 @@ public:
     uint8_t GetNightStartHour() const { return night_start_hour_.load(); }
     uint8_t GetNightEndHour() const { return night_end_hour_.load(); }
     bool GetNightEnabled() const { return night_enabled_.load(); }
+    // 只在工作日夜间启用省电（false=每天；true=仅工作日，法定节假日/周末不启用）
+    bool GetNightWorkdayOnly() const { return night_workday_only_.load(); }
 
     // 省电模式下的刷新间隔（分钟）——进入时 Quota/Weather 都用这个
     static constexpr uint32_t kPowerSaveRefreshMinutes = 60;
@@ -47,6 +49,7 @@ public:
     bool SetManualOverride(bool enabled, std::string& error);
     bool SetBatteryThreshold(uint8_t percent, std::string& error);
     bool SetNightWindow(uint8_t start_hour, uint8_t end_hour, bool enabled, std::string& error);
+    bool SetNightWorkdayOnly(bool workday_only, std::string& error);
 
     // 由 data_update_task 每秒调用：根据当前条件评估是否进入/退出
     void Evaluate(int battery_level, bool charging, int current_hour);
@@ -69,6 +72,7 @@ private:
     std::atomic<uint8_t> night_start_hour_{23};
     std::atomic<uint8_t> night_end_hour_{7};
     std::atomic<bool> night_enabled_{false};
+    std::atomic<bool> night_workday_only_{false};  // true=仅工作日夜间启用省电
 
     // 原配置备份（退出省电模式时恢复）—— Phase 2 使用
     uint32_t orig_quota_interval_minutes_ = 0;

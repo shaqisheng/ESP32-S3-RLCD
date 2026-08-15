@@ -7,11 +7,13 @@
 #include <nvs.h>
 
 #include <cstring>
+#include <ctime>
 
 #include "quota_manager.h"
 #include "weather_manager.h"
 #include "board.h"
 #include "application.h"
+#include "calendar_manager.h"
 
 namespace {
 constexpr const char* TAG = "PowerSaveMgr";
@@ -130,6 +132,31 @@ void PowerSaveManager::Evaluate(int battery_level, bool charging, int current_ho
             // 跨天：如 23-7 表示 23:00 到次日 07:00
             night = current_hour >= start || current_hour < end;
         }
+        // 仅工作日启用：判断今天是否是工作日
+        // 法定节假日（off_day=true）和周末（六日）不算工作日
+        // 调休上班（off_day=false）算工作日
+        if (night && night_workday_only_.load()) {
+            time_t now_t = time(nullptr);
+            struct tm now_tm;
+            localtime_r(&now_t, &now_tm);
+            // 周末（周六=6, 周日=0）不算工作日
+            if (now_tm.tm_wday == 0 || now_tm.tm_wday == 6) {
+                night = false;
+            } else {
+                // 法定节假日/调休判断（CalendarManager::Find 返回 off_day）
+                char date_str[32];
+                const int year = now_tm.tm_year + 1900;
+                const int month = now_tm.tm_mon + 1;
+                const int day = now_tm.tm_mday;
+                snprintf(date_str, sizeof(date_str), "%04d-%02d-%02d", year, month, day);
+                auto holiday = CalendarManager::GetInstance().Find(date_str);
+                if (!holiday.date.empty() && holiday.off_day) {
+                    // 法定休息日 → 不算工作日
+                    night = false;
+                }
+                // 调休上班（off_day=false）→ 算工作日，保持 night=true
+            }
+        }
     }
 
     if (low_battery) SetActive(true, "低电量");
@@ -166,6 +193,12 @@ bool PowerSaveManager::SetNightWindow(uint8_t start_hour, uint8_t end_hour, bool
     return true;
 }
 
+bool PowerSaveManager::SetNightWorkdayOnly(bool workday_only, std::string& error) {
+    night_workday_only_.store(workday_only);
+    SaveToNvs();
+    return true;
+}
+
 void PowerSaveManager::LoadFromNvs() {
     nvs_handle_t handle;
     if (nvs_open_from_partition(kPartition, kNamespace, NVS_READONLY, &handle) != ESP_OK) return;
@@ -175,6 +208,7 @@ void PowerSaveManager::LoadFromNvs() {
     if (nvs_get_u8(handle, "night_start", &u8) == ESP_OK && u8 <= 23) night_start_hour_.store(u8);
     if (nvs_get_u8(handle, "night_end", &u8) == ESP_OK && u8 <= 23) night_end_hour_.store(u8);
     if (nvs_get_u8(handle, "night_on", &u8) == ESP_OK) night_enabled_.store(u8 != 0);
+    if (nvs_get_u8(handle, "night_wd", &u8) == ESP_OK) night_workday_only_.store(u8 != 0);
     nvs_close(handle);
 }
 
@@ -186,6 +220,7 @@ void PowerSaveManager::SaveToNvs() {
     nvs_set_u8(handle, "night_start", night_start_hour_.load());
     nvs_set_u8(handle, "night_end", night_end_hour_.load());
     nvs_set_u8(handle, "night_on", night_enabled_.load() ? 1 : 0);
+    nvs_set_u8(handle, "night_wd", night_workday_only_.load() ? 1 : 0);
     nvs_commit(handle);
     nvs_close(handle);
 }
@@ -209,6 +244,7 @@ std::string PowerSaveManager::GetConfigJson() const {
     cJSON_AddNumberToObject(root, "night_start_hour", night_start_hour_.load());
     cJSON_AddNumberToObject(root, "night_end_hour", night_end_hour_.load());
     cJSON_AddBoolToObject(root, "night_enabled", night_enabled_.load());
+    cJSON_AddBoolToObject(root, "night_workday_only", night_workday_only_.load());
     char* raw = cJSON_PrintUnformatted(root);
     std::string out = raw ? raw : "{}";
     if (raw) cJSON_free(raw);
@@ -224,6 +260,7 @@ bool PowerSaveManager::ApplyConfigJson(const char* json, std::string& error) {
     const int start = static_cast<int>(JsonNumber(root, "night_start_hour", night_start_hour_.load()));
     const int end = static_cast<int>(JsonNumber(root, "night_end_hour", night_end_hour_.load()));
     const bool night_on = JsonBool(root, "night_enabled", night_enabled_.load());
+    const bool workday_only = JsonBool(root, "night_workday_only", night_workday_only_.load());
     cJSON_Delete(root);
     if (threshold < 5 || threshold > 50) { error = "电池阈值必须为 5-50%"; return false; }
     if (start < 0 || start > 23 || end < 0 || end > 23) { error = "时段必须为 0-23"; return false; }
@@ -232,6 +269,7 @@ bool PowerSaveManager::ApplyConfigJson(const char* json, std::string& error) {
     night_start_hour_.store(static_cast<uint8_t>(start));
     night_end_hour_.store(static_cast<uint8_t>(end));
     night_enabled_.store(night_on);
+    night_workday_only_.store(workday_only);
     SaveToNvs();
     return true;
 }
