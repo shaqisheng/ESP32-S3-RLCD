@@ -42,6 +42,9 @@ public:
     bool GetNightEnabled() const { return night_enabled_.load(); }
     // 全天省电（法定节假日/周末/调休日）：这些日子无视夜间时段直接 24h 启用
     bool GetRestDayAllDay() const { return rest_day_all_day_.load(); }
+    // 手动临时退出截止时间（epoch 秒）。手动点"关闭"时设为今天 23:59:59，
+    // Evaluate 在此时间前无视低电量/夜间/休息日条件，今天不再自动进入。
+    int64_t GetManualExitUntil() const { return manual_exit_until_.load(); }
 
     // 省电模式下的刷新间隔（分钟）——进入时 Quota/Weather 都用这个
     static constexpr uint32_t kPowerSaveRefreshMinutes = 60;
@@ -73,6 +76,8 @@ private:
     std::atomic<uint8_t> night_end_hour_{7};
     std::atomic<bool> night_enabled_{false};
     std::atomic<bool> rest_day_all_day_{false};  // true=节假日/周末/调休日全天启用省电
+    // 手动临时退出截止（epoch 秒，不写 NVS——重启后失效，允许自动进入）
+    std::atomic<int64_t> manual_exit_until_{0};
 
     // 原配置备份（退出省电模式时恢复）—— Phase 2 使用
     uint32_t orig_quota_interval_minutes_ = 0;
