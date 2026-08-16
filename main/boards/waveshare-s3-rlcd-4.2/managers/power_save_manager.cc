@@ -119,9 +119,23 @@ void PowerSaveManager::Evaluate(int battery_level, bool charging, int current_ho
         return;
     }
 
-    // 进入条件（任一满足）
+    // 手动临时退出：今天 23:59:59 前无视所有自动条件（低电量/夜间/休息日）
+    const int64_t now = time(nullptr);
+    if (manual_exit_until_.load() > 0 && now < manual_exit_until_.load()) {
+        SetActive(false, "");
+        return;
+    }
+
+    // 手动开关优先级最高：手动开启时强制启用（无视其他条件），
+    // 手动关闭时强制退出（无视低电量/夜间/休息日）。
+    // 这样用户能随时用后台一键切换，不会被自动条件顶回。
+    if (manual_override_.load()) {
+        SetActive(true, "手动");
+        return;
+    }
+
+    // 进入条件（手动关闭时的自动触发）
     const bool low_battery = battery_level >= 0 && battery_level < battery_threshold_.load();
-    const bool manual = manual_override_.load();
 
     // 法定节假日/周末/调休日全天省电（rest_day_all_day_ 启用时）
     bool rest_day = false;
@@ -159,7 +173,6 @@ void PowerSaveManager::Evaluate(int battery_level, bool charging, int current_ho
     }
 
     if (low_battery) SetActive(true, "低电量");
-    else if (manual) SetActive(true, "手动");
     else if (rest_day) SetActive(true, "休息日全天");
     else if (night) SetActive(true, "夜间时段");
     else SetActive(false, "");
@@ -167,6 +180,19 @@ void PowerSaveManager::Evaluate(int battery_level, bool charging, int current_ho
 
 bool PowerSaveManager::SetManualOverride(bool enabled, std::string& error) {
     manual_override_.store(enabled);
+    if (enabled) {
+        // 手动开启：清除临时退出标记（允许自动条件）
+        manual_exit_until_.store(0);
+    } else {
+        // 手动关闭：设置临时退出截止到今天 23:59:59，今天不再自动进入
+        time_t now_t = time(nullptr);
+        struct tm now_tm;
+        localtime_r(&now_t, &now_tm);
+        now_tm.tm_hour = 23;
+        now_tm.tm_min = 59;
+        now_tm.tm_sec = 59;
+        manual_exit_until_.store(mktime(&now_tm));
+    }
     SaveToNvs();
     return true;
 }
@@ -265,6 +291,19 @@ bool PowerSaveManager::ApplyConfigJson(const char* json, std::string& error) {
     if (threshold < 5 || threshold > 50) { error = "电池阈值必须为 5-50%"; return false; }
     if (start < 0 || start > 23 || end < 0 || end > 23) { error = "时段必须为 0-23"; return false; }
     manual_override_.store(manual);
+    if (manual) {
+        // 手动开启：清除临时退出标记
+        manual_exit_until_.store(0);
+    } else {
+        // 手动关闭：设置临时退出截止到今天 23:59:59
+        time_t now_t = time(nullptr);
+        struct tm now_tm;
+        localtime_r(&now_t, &now_tm);
+        now_tm.tm_hour = 23;
+        now_tm.tm_min = 59;
+        now_tm.tm_sec = 59;
+        manual_exit_until_.store(mktime(&now_tm));
+    }
     battery_threshold_.store(static_cast<uint8_t>(threshold));
     night_start_hour_.store(static_cast<uint8_t>(start));
     night_end_hour_.store(static_cast<uint8_t>(end));
