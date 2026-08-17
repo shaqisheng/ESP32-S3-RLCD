@@ -88,9 +88,12 @@ esp_err_t WeatherManager::http_event_handler(esp_http_client_event_t* event) {
 }
 
 WeatherManager::WeatherManager() {
-    response_buffer = static_cast<char*>(heap_caps_malloc(kResponseBufferSize,
-                                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!response_buffer) response_buffer = static_cast<char*>(heap_caps_malloc(kResponseBufferSize, MALLOC_CAP_8BIT));
+    // PSRAM 优先，失败时报错而不是 fallback 到内部 SRAM——内部 SRAM 紧张（3%），
+    // 16KB 缓冲区会耗尽它导致后台/Wi-Fi 崩溃。宁可天气失败也不能耗 SRAM。
+    response_buffer = static_cast<char*>(heap_caps_malloc(kResponseBufferSize, MALLOC_CAP_SPIRAM));
+    if (!response_buffer) {
+        ESP_LOGE(TAG, "天气响应缓冲区 PSRAM 分配失败（16KB），天气功能将不可用");
+    }
     Settings settings("weather", false);
     WeatherConfig config;
     config.province = settings.GetString("province", "江苏省");

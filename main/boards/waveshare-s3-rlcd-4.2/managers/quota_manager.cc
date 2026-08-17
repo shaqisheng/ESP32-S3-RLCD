@@ -296,9 +296,10 @@ bool QuotaManager::SetDisplayConfig(uint8_t cards_per_page, uint8_t auto_advance
 
 bool QuotaManager::HttpGet(const Entry& entry, const std::string& url, std::string& body,
                            int& status, std::string& error) {
-    auto* raw = static_cast<char*>(heap_caps_malloc(kMaxBody, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!raw) raw = static_cast<char*>(heap_caps_malloc(kMaxBody, MALLOC_CAP_8BIT));
-    if (!raw) { error = "内存不足"; return false; }
+    // PSRAM 优先，失败时报错而不是 fallback 到内部 SRAM——内部 SRAM 紧张（3%），
+    // 16KB 缓冲区会耗尽它导致后台/Wi-Fi 崩溃。宁可本次刷新失败也不能耗 SRAM。
+    auto* raw = static_cast<char*>(heap_caps_malloc(kMaxBody, MALLOC_CAP_SPIRAM));
+    if (!raw) { error = "PSRAM 分配失败"; return false; }
     raw[0] = '\0';
     HttpBuffer output{raw, 0, false, rlcd::BackgroundNetworkGeneration()};
     esp_http_client_config_t cfg = {};
