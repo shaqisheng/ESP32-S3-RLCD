@@ -11,7 +11,7 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         source = (BOARD / "weather_ui.cc").read_text()
         self.assertIn("EDITORIAL_OVERVIEW_V3", source)
         self.assertIn("MakePlainPanel(status_strip, lv_color_black())", source)
-        status = source[source.index("overview_wifi_symbol_"):source.index("time_label_")]
+        status = source[source.index("overview_status_label_"):source.index("time_label_")]
         self.assertIn("lv_color_white()", status)
         self.assertNotIn("lv_image_create", status)
         for legacy in ("time_card", "calendar_card", "memo_card"):
@@ -20,12 +20,19 @@ class RlcdUiSourceContractTest(unittest.TestCase):
     def test_overview_uses_symbol_labels_not_opaque_rgb565_icons(self):
         source = (BOARD / "weather_ui.cc").read_text()
         header = (BOARD / "custom_lcd_display.h").read_text()
-        self.assertIn("overview_wifi_symbol_", source)
-        self.assertIn("overview_battery_symbol_", source)
-        self.assertIn("LV_SYMBOL_WIFI", source)
-        self.assertIn("LV_SYMBOL_BATTERY_FULL", source)
-        self.assertIn("overview_wifi_symbol_", header)
-        self.assertNotIn("wifi_icon_img_ = lv_image_create(status_strip)", source)
+        update = (BOARD / "data_update_task.cc").read_text()
+        # 2026-08-17 SRAM 优化：3 个状态 label 合并成 1 个 overview_status_label_
+        # （"📶 🔋 92%"），wifi/电池符号改在 data_update_task 拼字符串。
+        self.assertIn("overview_status_label_", source)
+        self.assertIn("overview_status_label_", header)
+        self.assertIn("LV_SYMBOL_WIFI", update)
+        self.assertIn("LV_SYMBOL_BATTERY_FULL", update)
+        # 旧的独立字段不得回归
+        self.assertNotIn("overview_wifi_symbol_", source)
+        self.assertNotIn("overview_battery_symbol_", source)
+        self.assertNotIn("overview_wifi_symbol_", header)
+        self.assertNotIn("overview_battery_symbol_", header)
+        self.assertNotIn("lv_image_create(status_strip)", source)
 
     def test_calendar_shows_numeric_year_and_month_without_english_names(self):
         source = (BOARD / "calendar_ui.cc").read_text()
@@ -82,7 +89,9 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn("weatherCity", admin)
         self.assertNotIn("weatherLocation", admin)
         self.assertIn("amap_adcode", admin)
-        self.assertIn("高德城市 adcode（必填）", admin)
+        # adcode 由所选城市经 cityCatalog 自动生成，不再需要人工填写
+        self.assertIn("cityCatalog", admin)
+        self.assertIn("renderWeatherCities", admin)
         self.assertIn("weatherRefreshMinutes", admin)
         self.assertIn("refresh_interval_minutes", weather)
         self.assertIn("GetRefreshIntervalMinutes", header)
@@ -489,10 +498,11 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         # 重置时间格式化必须分开 absolute（"日时"）和 countdown（"天后"）
         self.assertIn("FormatResetAbsolute", source)
         self.assertIn("FormatResetCountdown", source)
-        # 进度条下方的组合文本必须有这三段
-        self.assertIn("weekly.label.c_str()", source)
-        self.assertIn("when", source)
-        self.assertIn("countdown", source)
+        # 进度条下方的组合文本：周剩余% + 重置时间(日时) + 倒计时。
+        # （周标签已刻意去掉以省宽度，见 quota_ui.cc 紧凑格式注释）
+        self.assertIn('"%d%% %s %s"', source)
+        self.assertIn("FormatResetAbsolute(weekly.reset_at, when, sizeof(when))", source)
+        self.assertIn("FormatResetCountdown(weekly.reset_at, countdown, sizeof(countdown))", source)
         # 不允许出现旧的 "重置" 后缀（已改为"后"）
         self.assertNotIn("%d天%d小时后重置", source)
         # 倒计时必须用紧凑缩写（d/h/m），不允许中文天/小时/分钟
