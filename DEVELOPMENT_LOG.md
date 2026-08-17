@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-08-17 — SRAM 优化：LVGL 堆整体迁往 PSRAM（内部 SRAM 3% → 17%）
+
+- **修改内容**：
+  1. **P2（核心）**：新增 `lvgl_mem_psram.cc`——实现 LVGL 9.4 `LV_USE_CUSTOM_MALLOC` 要求的 5 个符号（`lv_malloc_core`/`lv_realloc_core`/`lv_free_core` + 空 `lv_mem_init`/`lv_mem_deinit`），把 LVGL 全部动态内存（对象/样式/字符串/渲染临时块）重定向到 PSRAM（`MALLOC_CAP_SPIRAM`，无内部 SRAM 兜底）；`sdkconfig` + `sdkconfig.defaults` 从 `CONFIG_LV_USE_CLIB_MALLOC=y` 切换为 `CONFIG_LV_USE_CUSTOM_MALLOC=y`。
+  2. **P0**：`weather_ui.cc` 状态条 3 个 label（wifi 符号 + 电池符号 + 百分比）合并为 1 个 `overview_status_label_`（不能叫 `status_label_`，那是 LcdDisplay 基类成员）；删除 3 个装饰对象（`assistant_divider`、`todo_rule`、`low_battery_popup_`+`low_battery_label_`）；低电量告警改为复用 `sensor_label_` 反色显示（白底黑字"电量低，请充电"），恢复时强制温湿度重写。`data_update_task.cc` 对应改为脏标记 + 末尾重组一次状态条字符串。`custom_lcd_display.h` 删除 3 个从未创建过的死字段（`wifi_icon_img_`/`battery_icon_img_`/`battery_pct_label_`）。
+  3. **P1**：`weather_manager.cc`（16KB 响应缓冲）与 `quota_manager.cc`（HttpGet 16KB 体缓冲）分配失败时不再 fallback 到内部 SRAM，改为报错返回——宁可本次刷新失败也不能耗尽内部 SRAM。
+- **修改原因**：设备信息页显示内部 SRAM 只剩 3%（约 11KB），最低水位一度 3411B，处于随时 OOM 的危险状态。根因：`CONFIG_LV_USE_CLIB_MALLOC` 让 LVGL 走标准 malloc（内部 SRAM 优先），6 个页面的 LVGL 对象长期占用内部 SRAM（曾出现 10 个 label 把余量压到 1219B）。
+- **影响范围**：全设备内存布局。用户可见：界面无变化（截图验证 AI 页/综合页渲染一致）；低电量弹窗改为顶部传感器行反色提示；稳定性预期显著提升。LVGL 对象现驻 PSRAM，刷屏 buffer 本来就是显式 PSRAM 分配（`custom_lcd_display.cc:86`），flush 路径不经过 LVGL 堆，SPI DMA 不受影响。
+- **测试结果**：
+  - idf.py build: ✅（app 分区 5% free，无变化）
+  - 契约测试: N/A（未改 UI 源码契约）
+  - 真机验证: ✅（烧录后观察 75 秒无 abort/reboot/NO_MEM；`free sram` 稳定在 65–83KB，**minimal sram 58735B**（优化前 3411B），远超 ≥20KB 目标；AI 页与综合页截图渲染正常，合并状态条显示"📶 🔋 92%"正确，后台登录/截图/切页 API 正常）
+  - app 分区使用率: 95%（与之前一致）
+- **回滚方式**：`git checkout -- sdkconfig.defaults main/boards/waveshare-s3-rlcd-4.2/lvgl_mem_psram.cc`（未提交时）；已提交则 revert 对应 commit。注意 `sdkconfig` 本地未跟踪，回滚需同时把 `CONFIG_LV_USE_CUSTOM_MALLOC` 改回 `CONFIG_LV_USE_CLIB_MALLOC=y` 并重新编译。
+- **关联文档**：`ARCHITECTURE.md` §7 不变量（LVGL 对象预算条款）；`AGENTS.md` §4.1 板级目录结构
+- **注意**：`xcrun clang-format`（Apple clang-format 21）会按 `.clang-format` 把仓库现存风格（单行短 if 等）全部重排，产生大量格式化噪音——本仓库代码并未严格按 `.clang-format` 格式化过，**不要对存量文件运行 clang-format 21**，手改保持周边风格即可（本次已回退一轮噪音）。
+
+---
+
 ## 2026-08-17 — 删除 116 个与本硬件无关的上游板级目录
 
 - **修改内容**：删除 `main/boards/` 下除 `waveshare-s3-rlcd-4.2/`（本板）和 `common/`（共享层，本板依赖）之外的全部 116 个上游继承板目录（如 `esp32-s3-touch-amoled-1.8`、`kevin-box-2`、`m5stack-*` 等），共 543 个被跟踪文件。同步修正 `AGENTS.md` 中三处"119 个板目录"的过时表述。

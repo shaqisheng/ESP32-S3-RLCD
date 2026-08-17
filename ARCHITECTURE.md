@@ -235,10 +235,11 @@ GET /api/status:
 ### 6.2 内部 SRAM 比 PSRAM 更稀缺
 
 PSRAM 充足不代表 SPI/DMA 可用的内部 heap 充足。最初的日历/天气页创建大量 LVGL 对象导致 `ESP_ERR_NO_MEM`（HANDOFF §7.6）。**对策**：
+- **LVGL 堆整体驻留 PSRAM**（2026-08-17 起）：`CONFIG_LV_USE_CUSTOM_MALLOC=y`，`lvgl_mem_psram.cc` 把 `lv_malloc_core/lv_realloc_core/lv_free_core` 重定向到 `MALLOC_CAP_SPIRAM`（无内部 SRAM 兜底）。安全前提：刷屏帧缓冲是显式 PSRAM 分配（`custom_lcd_display.cc:86`），flush 路径不经过 LVGL 堆，LVGL 分配的内存不参与 SPI DMA。**不要把 LVGL malloc 改回 CLIB/BUILTIN**——那会把全部 LVGL 对象/样式/字符串拉回内部 SRAM（此前 free SRAM 仅 ~8KB、最低水位 3.4KB；迁移后 free ~65KB、最低水位 ~58KB）。
 - 用少量多行 `lv_label` 替代网格对象树；
 - 显示帧缓冲与 LUT 全部放 PSRAM；
 - SPI 按 1 KB 分片，`ESP_ERR_NO_MEM` 重试 3 次。
-- **新增 UI 必须严格预算 LVGL 对象数。**
+- 联网响应缓冲（天气/额度各 16KB）只分配 PSRAM，失败时报错而不是 fallback 到内部 SRAM。
 
 ### 6.3 安全基元统一到 header-only
 

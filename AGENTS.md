@@ -80,6 +80,7 @@ main/boards/waveshare-s3-rlcd-4.2/
 ├── custom_lcd_display.{h,cc}  # LcdDisplay 子类
 ├── data_update_task.cc        # 周期数据任务
 ├── rlcd_driver.{h,cc}         # 显示驱动
+├── lvgl_mem_psram.cc          # LVGL 自定义分配器（全部 LVGL 堆 → PSRAM，勿改回 CLIB malloc）
 ├── secret_config.h.example    # 密钥模板（真实 secret_config.h 被 gitignore）
 ├── assets/                    # 图标/字体（C 数组）
 └── managers/                  # 业务 manager（每个一对 .h/.cc）
