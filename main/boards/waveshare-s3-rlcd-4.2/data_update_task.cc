@@ -399,13 +399,19 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
             if (allow_noncritical_update) {
                 last_noncritical_ui_update_ms = now_ms;
 
+                // 低电量告警激活期间 sensor_label_ 被借用来显示"电量低"，温湿度文本不能覆盖它
+                // （独立 low_battery_popup_ 弹窗已删除，见下方电池状态块）。
+                static bool low_battery_alert_active = false;
+                // 概览页状态条（wifi+电池合并成 1 个 label）任一组成变化时置脏，循环末尾重组字符串。
+                static bool overview_status_dirty = true;
+
                 // 2. 温湿度更新
                 SensorData sd = SensorManager::getInstance().getTempHumidity();
                 if (sd.valid) {
                     if (fabs(sd.temperature - self->last_temp_) > 0.2f || fabs(sd.humidity - self->last_humi_) > 1.0f) {
                         char buf[32];
                         snprintf(buf, sizeof(buf), "%.1f°C  %.0f%%", sd.temperature, sd.humidity);
-                        if (self->sensor_label_) lv_label_set_text(self->sensor_label_, buf);
+                        if (self->sensor_label_ && !low_battery_alert_active) lv_label_set_text(self->sensor_label_, buf);
                         if (self->music_sensor_label_) lv_label_set_text(self->music_sensor_label_, buf);
                         if (self->pomo_sensor_label_) lv_label_set_text(self->pomo_sensor_label_, buf);
                         self->last_temp_ = sd.temperature;
@@ -455,16 +461,6 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
                         else if (icon_mode == 0) icon_src = &ui_img_battery_low;
                         else if (icon_mode == 1) icon_src = &ui_img_battery_medium;
 
-                        if (self->battery_icon_img_) {
-                            lv_image_set_src(self->battery_icon_img_, icon_src);
-                        }
-                        if (self->overview_battery_symbol_) {
-                            const char* symbol = LV_SYMBOL_BATTERY_FULL;
-                            if (icon_mode == 0) symbol = LV_SYMBOL_BATTERY_EMPTY;
-                            else if (icon_mode == 1) symbol = LV_SYMBOL_BATTERY_2;
-                            else if (icon_mode == 3) symbol = LV_SYMBOL_CHARGE;
-                            lv_label_set_text(self->overview_battery_symbol_, symbol);
-                        }
                         if (self->music_battery_icon_img_) {
                             lv_image_set_src(self->music_battery_icon_img_, icon_src);
                         }
@@ -472,32 +468,48 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
                             lv_image_set_src(self->pomo_battery_icon_img_, icon_src);
                         }
                         last_icon_mode = icon_mode;
+                        overview_status_dirty = true;
                     }
 
-                    if (self->battery_pct_label_ && cached_battery_level != last_battery_level) {
+                    if (cached_battery_level != last_battery_level) {
                         char bat_buf[16];
                         snprintf(bat_buf, sizeof(bat_buf), "%d%%", cached_battery_level);
-                        lv_label_set_text(self->battery_pct_label_, bat_buf);
                         if (self->music_battery_pct_label_) lv_label_set_text(self->music_battery_pct_label_, bat_buf);
                         if (self->pomo_battery_pct_label_) lv_label_set_text(self->pomo_battery_pct_label_, bat_buf);
                         last_battery_level = cached_battery_level;
+                        overview_status_dirty = true;
                     }
 
                     // 低电量提醒（对齐原版行为）：
-                    // - 放电且低于 20% 时显示弹窗并播一次提示音
-                    // - 回升到 25% 及以上（或进入充电）后隐藏，避免 19/20% 抖动反复闪烁
-                    static bool low_battery_popup_visible = false;
+                    // - 放电且低于 20% 时复用 sensor_label_ 反色显示告警并播一次提示音
+                    //   （独立 low_battery_popup_ 弹窗已删除，省 2 个 LVGL 对象）
+                    // - 回升到 25% 及以上（或进入充电）后恢复，避免 19/20% 抖动反复闪烁
                     const bool should_show_low_battery = (!cached_charging && cached_discharging && cached_battery_level < 20);
                     const bool should_hide_low_battery = (cached_charging || !cached_discharging || cached_battery_level >= 25);
-                    if (self->low_battery_popup_) {
-                        if (!low_battery_popup_visible && should_show_low_battery) {
-                            lv_obj_remove_flag(self->low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-                            app.PlaySound(Lang::Sounds::OGG_LOW_BATTERY);
-                            low_battery_popup_visible = true;
-                        } else if (low_battery_popup_visible && should_hide_low_battery) {
-                            lv_obj_add_flag(self->low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-                            low_battery_popup_visible = false;
+                    if (!low_battery_alert_active && should_show_low_battery) {
+                        low_battery_alert_active = true;
+                        if (self->sensor_label_) {
+                            lv_obj_set_style_bg_color(self->sensor_label_, lv_color_white(), 0);
+                            lv_obj_set_style_bg_opa(self->sensor_label_, LV_OPA_COVER, 0);
+                            lv_obj_set_style_text_color(self->sensor_label_, lv_color_black(), 0);
+                            lv_obj_set_style_border_width(self->sensor_label_, 1, 0);
+                            lv_obj_set_style_border_color(self->sensor_label_, lv_color_black(), 0);
+                            lv_obj_set_style_pad_left(self->sensor_label_, 4, 0);
+                            lv_obj_set_style_pad_right(self->sensor_label_, 4, 0);
+                            lv_label_set_text(self->sensor_label_, "电量低，请充电");
                         }
+                        app.PlaySound(Lang::Sounds::OGG_LOW_BATTERY);
+                    } else if (low_battery_alert_active && should_hide_low_battery) {
+                        low_battery_alert_active = false;
+                        if (self->sensor_label_) {
+                            lv_obj_set_style_bg_opa(self->sensor_label_, LV_OPA_TRANSP, 0);
+                            lv_obj_set_style_text_color(self->sensor_label_, lv_color_white(), 0);
+                            lv_obj_set_style_border_width(self->sensor_label_, 0, 0);
+                            lv_obj_set_style_pad_left(self->sensor_label_, 0, 0);
+                            lv_obj_set_style_pad_right(self->sensor_label_, 0, 0);
+                        }
+                        // 强制下一轮温湿度更新重写文本（否则要等温度变化才恢复）
+                        self->last_temp_ = -1000.0f;
                     }
                 }
 
@@ -510,13 +522,6 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
                     } else if (ds == kDeviceStateWifiConfiguring) {
                         wifi_src = &ui_img_wifi_low;
                     }
-                    if (self->wifi_icon_img_) {
-                        lv_image_set_src(self->wifi_icon_img_, wifi_src);
-                    }
-                    if (self->overview_wifi_symbol_) {
-                        lv_label_set_text(self->overview_wifi_symbol_,
-                                          ds == kDeviceStateStarting ? LV_SYMBOL_CLOSE : LV_SYMBOL_WIFI);
-                    }
                     if (self->music_wifi_icon_img_) {
                         lv_image_set_src(self->music_wifi_icon_img_, wifi_src);
                     }
@@ -524,10 +529,32 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
                         lv_image_set_src(self->pomo_wifi_icon_img_, wifi_src);
                     }
                     last_wifi_state = ds;
+                    overview_status_dirty = true;
+                }
+
+                // 6. 概览页状态条：wifi 符号 + 电池符号 + 百分比合并成 1 个 label，
+                //    任一组成变化（上方置脏）时重组一次字符串
+                if (overview_status_dirty && self->overview_status_label_) {
+                    overview_status_dirty = false;
+                    const char* wifi_sym =
+                        (ds == kDeviceStateStarting) ? LV_SYMBOL_CLOSE : LV_SYMBOL_WIFI;
+                    char strip_buf[40];
+                    if (battery_cached) {
+                        const char* bat_sym = LV_SYMBOL_BATTERY_FULL;
+                        if (cached_charging) bat_sym = LV_SYMBOL_CHARGE;
+                        else if (cached_battery_level < 20) bat_sym = LV_SYMBOL_BATTERY_EMPTY;
+                        else if (cached_battery_level < 60) bat_sym = LV_SYMBOL_BATTERY_2;
+                        snprintf(strip_buf, sizeof(strip_buf), "%s %s %d%%",
+                                 wifi_sym, bat_sym, cached_battery_level);
+                    } else {
+                        snprintf(strip_buf, sizeof(strip_buf), "%s " LV_SYMBOL_BATTERY_FULL " --%%",
+                                 wifi_sym);
+                    }
+                    lv_label_set_text(self->overview_status_label_, strip_buf);
                 }
             }
 
-            // 6. AI 状态更新
+            // 7. AI 状态更新
             static DeviceState last_ds = kDeviceStateUnknown;
             if (ds != last_ds) {
                 // AI 状态发生变化（对话、聆听等），视为用户活动

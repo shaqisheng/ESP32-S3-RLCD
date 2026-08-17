@@ -24,7 +24,6 @@ LV_IMAGE_DECLARE(ui_img_weather_unknown_large);
 namespace {
 constexpr int kTopHeight = 184;
 constexpr int kAssistantWidth = 240;
-constexpr int kEmotionWidth = 76;
 const char* TAG = "WeatherUI";
 
 void MakePlainPanel(lv_obj_t* object, lv_color_t color) {
@@ -70,19 +69,13 @@ void CustomLcdDisplay::SetupWeatherUI() {
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(status_strip, 5, 0);
 
-    // RGB565 资源自带白色背景，黑底上强制重着色会变成白色方块。
-    overview_wifi_symbol_ = lv_label_create(status_strip);
-    lv_label_set_text(overview_wifi_symbol_, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(overview_wifi_symbol_, lv_color_white(), 0);
-    lv_obj_set_style_text_font(overview_wifi_symbol_, LV_FONT_DEFAULT, 0);
-    overview_battery_symbol_ = lv_label_create(status_strip);
-    lv_label_set_text(overview_battery_symbol_, LV_SYMBOL_BATTERY_FULL);
-    lv_obj_set_style_text_color(overview_battery_symbol_, lv_color_white(), 0);
-    lv_obj_set_style_text_font(overview_battery_symbol_, LV_FONT_DEFAULT, 0);
-    battery_pct_label_ = lv_label_create(status_strip);
-    lv_obj_set_style_text_font(battery_pct_label_, &alibaba_puhui_16, 0);
-    lv_obj_set_style_text_color(battery_pct_label_, lv_color_white(), 0);
-    lv_label_set_text(battery_pct_label_, "---%");
+    // 状态条 3 个 label 合并成 1 个（"📶 🔋 75%"），省 2 个 LVGL 对象。
+    // 原来 wifi_symbol + battery_symbol + battery_pct 三个独立 label，现在拼成一个字符串。
+    // 注意：命名不能叫 status_label_，那是 LcdDisplay 基类成员（下方隐藏占位在用）。
+    overview_status_label_ = lv_label_create(status_strip);
+    lv_obj_set_style_text_color(overview_status_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_font(overview_status_label_, LV_FONT_DEFAULT, 0);
+    lv_label_set_text(overview_status_label_, "📶 🔋 ---%");
 
     time_label_ = lv_label_create(weather_page_);
     lv_obj_set_pos(time_label_, 8, 36);
@@ -146,11 +139,6 @@ void CustomLcdDisplay::SetupWeatherUI() {
     lv_obj_set_style_text_align(emotion_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(emotion_label_, "待命");
 
-    lv_obj_t* assistant_divider = lv_obj_create(chat_card_);
-    lv_obj_set_pos(assistant_divider, kEmotionWidth, 10);
-    lv_obj_set_size(assistant_divider, 1, 96);
-    MakePlainPanel(assistant_divider, lv_color_black());
-
     chat_status_label_ = lv_label_create(chat_card_);
     lv_obj_set_width(chat_status_label_, 146);
     lv_obj_set_style_text_font(chat_status_label_, &font_puhui_16_4, 0);
@@ -174,11 +162,6 @@ void CustomLcdDisplay::SetupWeatherUI() {
     lv_obj_set_style_text_color(todo_title, lv_color_black(), 0);
     lv_label_set_text(todo_title, "今日待办");
 
-    lv_obj_t* todo_rule = lv_obj_create(todo_panel);
-    lv_obj_set_pos(todo_rule, 10, 31);
-    lv_obj_set_size(todo_rule, 140, 1);
-    MakePlainPanel(todo_rule, lv_color_black());
-
     memo_list_label_ = lv_label_create(todo_panel);
     lv_obj_set_pos(memo_list_label_, 10, 38);
     lv_obj_set_size(memo_list_label_, 140, 70);
@@ -197,25 +180,6 @@ void CustomLcdDisplay::SetupWeatherUI() {
     MakeHiddenLabel(status_label_, weather_page_);
     MakeHiddenLabel(notification_label_, weather_page_);
     MakeHiddenLabel(mute_label_, weather_page_);
-
-    low_battery_popup_ = lv_obj_create(weather_page_);
-    lv_obj_set_size(low_battery_popup_, 320, 42);
-    lv_obj_align(low_battery_popup_, LV_ALIGN_BOTTOM_MID, 0, -10);
-    lv_obj_set_style_bg_color(low_battery_popup_, lv_color_white(), 0);
-    lv_obj_set_style_bg_opa(low_battery_popup_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(low_battery_popup_, 2, 0);
-    lv_obj_set_style_border_color(low_battery_popup_, lv_color_black(), 0);
-    lv_obj_set_style_radius(low_battery_popup_, 0, 0);
-    lv_obj_set_style_pad_all(low_battery_popup_, 6, 0);
-    lv_obj_remove_flag(low_battery_popup_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-    low_battery_label_ = lv_label_create(low_battery_popup_);
-    lv_obj_set_style_text_font(low_battery_label_, &font_puhui_16_4, 0);
-    lv_obj_set_style_text_color(low_battery_label_, lv_color_black(), 0);
-    lv_obj_set_width(low_battery_label_, 300);
-    lv_obj_set_style_text_align(low_battery_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_center(low_battery_label_);
-    lv_label_set_text(low_battery_label_, "电量低，请尽快充电");
 
     emoji_label_ = lv_label_create(weather_page_);
     lv_label_set_text(emoji_label_, "");

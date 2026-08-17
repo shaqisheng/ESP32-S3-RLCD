@@ -146,11 +146,9 @@ private:
     uint32_t quota_rendered_revision_ = 0;
 
     // 主页状态栏使用透明文字符号，避免 RGB565 图标的白色不透明底。
-    lv_obj_t *overview_wifi_symbol_ = nullptr;
-    lv_obj_t *overview_battery_symbol_ = nullptr;
-    lv_obj_t *wifi_icon_img_ = nullptr;
-    lv_obj_t *battery_icon_img_ = nullptr;
-    lv_obj_t *battery_pct_label_ = nullptr;  // 电池百分比文字
+    // 3 个 label 合并成 1 个 overview_status_label_（"📶 🔋 75%"），省 2 个 LVGL 对象。
+    // （不能命名 status_label_，那是 LcdDisplay 基类成员，weather_ui.cc 的隐藏占位在用。）
+    lv_obj_t *overview_status_label_ = nullptr;
     lv_obj_t *music_wifi_icon_img_ = nullptr;     // 音乐页面状态栏 WiFi 图标
     lv_obj_t *music_battery_icon_img_ = nullptr;  // 音乐页面状态栏电池图标
     lv_obj_t *music_battery_pct_label_ = nullptr; // 音乐页面状态栏电量文字
