@@ -6,6 +6,20 @@
 
 ---
 
+## 2026-08-17 — 删除 116 个与本硬件无关的上游板级目录
+
+- **修改内容**：删除 `main/boards/` 下除 `waveshare-s3-rlcd-4.2/`（本板）和 `common/`（共享层，本板依赖）之外的全部 116 个上游继承板目录（如 `esp32-s3-touch-amoled-1.8`、`kevin-box-2`、`m5stack-*` 等），共 543 个被跟踪文件。同步修正 `AGENTS.md` 中三处"119 个板目录"的过时表述。
+- **修改原因**：用户确认这些目录与 Waveshare ESP32-S3-RLCD-4.2 无关，要求清除。删除前已验证：①构建只编译 `boards/${BOARD_TYPE}`（=waveshare-s3-rlcd-4.2）+ `boards/common`（`main/CMakeLists.txt:63-66,652-659`）；②本板源码无指向兄弟板目录的交叉 include；③`scripts/release.py` 与 CI 按目录动态发现板子，删除后仅矩阵缩小，不会断；④其他目录无任何硬编码引用这些路径。
+- **影响范围**：仅仓库体积与可读性；不参与编译的代码，固件产物零变化。`main/Kconfig.projbuild` 中各板 `CONFIG_BOARD_TYPE_*` 选项保留（不引用目录，无害）。
+- **测试结果**：
+  - idf.py build: N/A（删除的目录从不参与编译，构建输入无变化；如需复验请告知）
+  - 契约测试: N/A（未动本板源码）
+  - 真机验证: N/A（固件无变化）
+- **回滚方式**：`git checkout -- main/boards/`（删除尚未提交时）或从上游 `78/xiaozhi-esp32` 恢复
+- **关联文档**：`AGENTS.md` §1、§2.5、§6.1
+
+---
+
 ## 2026-08-14 — 修复“无法连接服务”错误提示永久残留小智区域
 
 - **修改内容**：`custom_lcd_display.cc` `CustomLcdDisplay::SetChatMessage`——把原来的

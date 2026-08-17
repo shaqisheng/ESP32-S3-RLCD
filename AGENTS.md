@@ -9,7 +9,7 @@
 ## 1. 项目背景（30 秒读懂）
 
 - **本项目**：Waveshare ESP32-S3-RLCD-4.2 桌面信息屏固件。基于上游 `78/xiaozhi-esp32`（小智 AI 语音助手），fork 出来扩展为综合页/日历/七日天气/AI 额度四页 + 局域网后台。
-- **当前唯一生产板**：`main/boards/waveshare-s3-rlcd-4.2/`。其他 119 个板目录是上游继承的，**不要动**。
+- **当前唯一生产板**：`main/boards/waveshare-s3-rlcd-4.2/`。上游继承的其余 116 个板目录已于 2026-08-17 应用户要求全部删除（与本硬件无关、不参与编译）。`main/boards/common/` 是所有板共享的通用层，本板基类来自这里，**不要删**。
 - **资源硬约束**：内部 SRAM 紧张、应用分区仅剩约 6%、单会话后台、明文 HTTP（仅可信局域网）。
 - **代码状态**：当前 git 只有"初始化"一个提交，所有业务文件在 working tree。`PROJECT_HANDOFF.md` 描述的是迁移前的旧版本（部分过时），以**当前代码**为准。
 - 完整介绍见 `PROJECT_CONTEXT.md`。
@@ -26,7 +26,7 @@
 2. **优先复用现有安全基元**（`manager_safety.h`、`proxy_auth.h`），不要造轮子。
 3. **资源优先**：内部 SRAM 比 PSRAM 稀缺；Flash 比 CPU 稀缺。新增任何 LVGL 对象、字体、资源前先评估。
 4. **离线优先**：网络抖动时桌面屏仍要可读，所有外部请求失败保留最后有效快照。
-5. **不改上游通用层**（`main/` 顶层、其他板目录），除非任务明确要求且用户已确认。
+5. **不改上游通用层**（`main/` 顶层、`boards/common`），除非任务明确要求且用户已确认。
 6. **不引入新的运行时依赖**（尤其是 C++ 第三方库）；优先用 ESP-IDF 自带组件。
 7. **当文档与代码冲突时，以代码为准**，并立刻更新文档。
 
@@ -157,7 +157,7 @@ main/boards/waveshare-s3-rlcd-4.2/
 - ❌ 在 `ApplyConfigJson` 等持锁路径加 NVS/网络 IO
 - ❌ 在构造函数中启动网络服务（必须等 `WifiBoard::StartNetwork()`）
 - ❌ 在 LVGL 关键路径分配大块内部 SRAM
-- ❌ 改动其他 119 个板目录的代码（除非任务明确要求且用户确认）
+- ❌ 改动 `main/boards/common/` 共享层（本板依赖它；除非任务明确要求且用户确认）
 - ❌ 删 `idf_component.yml` 任何依赖（多板共享）
 - ❌ 提交 `sdkconfig`、`build/`、`managed_components/`、`dependencies.lock`、`*.bin`、`secret_config.h`、`*.dataless-backup`（前 6 个已被 .gitignore）
 
