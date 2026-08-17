@@ -930,8 +930,11 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
     cJSON* root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "volume", codec ? codec->output_volume() : 0);
     cJSON_AddNumberToObject(root, "uptime_seconds", esp_timer_get_time() / 1000000LL);
-    cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
-    cJSON_AddNumberToObject(root, "minimum_free_heap", esp_get_minimum_free_heap_size());
+    // 与设备信息页/串口 SystemInfo 日志同源：MALLOC_CAP_INTERNAL 才是纯内部 SRAM。
+    // esp_get_free_heap_size() 是 SRAM+PSRAM 混合值，曾让后台"可用 SRAM"显示约 7.3MB，
+    // 与 info 页（纯 SRAM）严重不一致。
+    cJSON_AddNumberToObject(root, "free_heap", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    cJSON_AddNumberToObject(root, "minimum_free_heap", heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
     cJSON_AddNumberToObject(root, "free_psram", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     cJSON_AddNumberToObject(root, "wifi_rssi", wifi.IsConnected() ? wifi.GetRssi() : 0);
     cJSON_AddStringToObject(root, "wifi_ssid", wifi.IsConnected() ? wifi.GetSsid().c_str() : "");

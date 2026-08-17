@@ -6,6 +6,24 @@
 
 ---
 
+## 2026-08-17 — Info 页内存改"使用/全部" + 后台 SRAM 显示与 info 页对齐
+
+- **修改内容**：
+  1. `info_ui.cc` 内存区：`SRAM/PSRAM` 从"可用/总量 + 可用百分比"改为"使用/总量 + 使用百分比"，状态词（正常/紧张/危险）保留、仍按可用字节判定（设计稿经用户确认）。
+  2. `managers/admin_server.cc` `/api/device`：`free_heap`/`minimum_free_heap` 从 `esp_get_free_heap_size()`（SRAM+PSRAM 混合值，约 7.3MB）改为 `heap_caps_get_free_size(MALLOC_CAP_INTERNAL)` / `heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL)`，与 info 页和串口 SystemInfo 日志同源。
+  3. `tests/host/rlcd_ui_source_contract_test.py` 同步 4 个过期契约（AGENTS §7.2 补漏）：overview 状态条合并为 `overview_status_label_` 后更新两个 overview 测试；AI 卡片进度条下方去掉周标签改用 `"%d%% %s %s"` 紧凑格式；天气 adcode 改为城市下拉自动生成（`cityCatalog`）后删除"高德城市 adcode（必填）"旧断言。
+- **修改原因**：①用户要求 info 页内存按"使用/全部"展示；②后台设备控制的"可用 SRAM/最低 SRAM"显示约 7.3MB，与 info 页（纯内部 SRAM）严重不一致——根因是 `esp_get_free_heap_size()` 返回全部 heap 混合值（info_ui.cc:103 注释早就标注过这个坑，后台踩了同一个）。
+- **影响范围**：info 页内存行显示格式；后台设备控制两个 SRAM 字段的数值（变小到真实的几十 KB，危险/紧张标红判定从此真正生效）；无行为逻辑变化。
+- **测试结果**：
+  - idf.py build: ✅
+  - 契约测试: ✅ 46/46（修复前 3 FAIL + 1 ERROR）
+  - 真机验证: ✅（烧录后 60 秒无 abort/reboot；串口 free 66019/minimal 59123；`/api/device` free_heap=67.7KB、minimum=55.0KB 与串口一致；info 页截图显示 `SRAM 正常 320KB/387KB (82%)`，387-320≈67KB 与后台一致）
+  - app 分区使用率: 95%（无变化）
+- **回滚方式**：git revert 对应 commit
+- **关联文档**：无（显示层调整，架构/上下文文档不涉及）
+
+---
+
 ## 2026-08-17 — SRAM 优化：LVGL 堆整体迁往 PSRAM（内部 SRAM 3% → 17%）
 
 - **修改内容**：

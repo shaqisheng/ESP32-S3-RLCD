@@ -99,19 +99,21 @@ void CustomLcdDisplay::UpdateInfoPageInternal() {
                        esp_app_get_description()->version,
                        running ? running->label : "?");
 
-    // 2. 内存（可用/总量 + 百分比 + 状态）
+    // 2. 内存（使用/总量 + 使用百分比 + 状态；状态词仍按可用字节判定）
     // esp_get_free_heap_size() 返回所有 heap（SRAM+PSRAM 混合），不是纯 SRAM。
     // 要用 heap_caps_get_free_size(MALLOC_CAP_INTERNAL) 才是纯 SRAM。
     const size_t sram_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     const size_t sram_total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
-    const int sram_pct = sram_total > 0 ? (sram_free * 100 / sram_total) : 0;
+    const size_t sram_used = sram_total > sram_free ? sram_total - sram_free : 0;
+    const int sram_pct = sram_total > 0 ? static_cast<int>(sram_used * 100 / sram_total) : 0;
     const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     const size_t psram_total = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
-    const int psram_pct = psram_total > 0 ? (psram_free * 100 / psram_total) : 0;
+    const size_t psram_used = psram_total > psram_free ? psram_total - psram_free : 0;
+    const int psram_pct = psram_total > 0 ? static_cast<int>(psram_used * 100 / psram_total) : 0;
     offset += snprintf(text + offset, sizeof(text) - offset,
                        "内存  SRAM %s %dKB/%dKB (%d%%)\n      PSRAM %s %dKB/%dKB (%d%%)\n\n",
-                       SramStatus(sram_free), (int)(sram_free / 1024), (int)(sram_total / 1024), sram_pct,
-                       PsramStatus(psram_free), (int)(psram_free / 1024), (int)(psram_total / 1024), psram_pct);
+                       SramStatus(sram_free), (int)(sram_used / 1024), (int)(sram_total / 1024), sram_pct,
+                       PsramStatus(psram_free), (int)(psram_used / 1024), (int)(psram_total / 1024), psram_pct);
 
     // 3. 网络
     auto& wifi = WifiManager::GetInstance();
