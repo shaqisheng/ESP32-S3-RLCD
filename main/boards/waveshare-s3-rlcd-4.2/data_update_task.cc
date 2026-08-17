@@ -311,6 +311,7 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
                 self->UpdateWeatherDisplaysInternal();
                 self->RefreshMemoDisplayInternal();
                 self->UpdateTodoPageInternal();
+                self->UpdateInfoPageInternal();
 
                 self->last_min_ = timeinfo.tm_min;
                 ESP_LOGI(TAG, "时间已更新: %s, %s, %d日", time_buf, weeks_en[timeinfo.tm_wday], timeinfo.tm_mday);

@@ -37,6 +37,7 @@ private:
         MODE_FORECAST = 2,
         MODE_QUOTA = 3,
         MODE_TODO = 4,
+        MODE_INFO = 5,
     };
     DisplayMode display_mode_ = MODE_OVERVIEW;
 
@@ -55,6 +56,10 @@ private:
     lv_obj_t *todo_overflow_label_ = nullptr;
     lv_obj_t *todo_empty_icon_ = nullptr;         // 空状态手绘清单图标容器
     lv_obj_t *todo_empty_text_ = nullptr;         // 空状态文字
+    lv_obj_t *info_page_ = nullptr;
+    lv_obj_t *info_header_strip_ = nullptr;
+    lv_obj_t *info_header_label_ = nullptr;
+    lv_obj_t *info_content_label_ = nullptr;  // 单一大 label 多行文本（省 SRAM）
 
     // ===== 天气站 UI 组件 =====
     // 状态栏（右上角浮动胶囊）
@@ -180,6 +185,7 @@ private:
     void SetupPomodoroUI();
     void SetupQuotaUI();
     void SetupTodoUI();
+    void SetupInfoUI();
     void ApplyDisplayMode();
     void UpdateCalendarInternal(const struct tm& timeinfo);
     void UpdateWeatherDisplaysInternal();
@@ -242,12 +248,15 @@ public:
     bool IsCalendarMode() const { return display_mode_ == MODE_CALENDAR; }
     bool IsForecastMode() const { return display_mode_ == MODE_FORECAST; }
     bool IsTodoMode() const { return display_mode_ == MODE_TODO; }
+    bool IsInfoMode() const { return display_mode_ == MODE_INFO; }
     bool IsOverviewMode() const { return display_mode_ == MODE_OVERVIEW; }
     void SwitchToCalendarPage();
     void SwitchToForecastPage();
     void SwitchToPomodoroPage();
     void SwitchToQuotaPage();
     void SwitchToTodoPage();
+    void SwitchToInfoPage();
+    void UpdateInfoPageInternal();
     void UpdateTodoPageInternal();
     // 立即在天气页头部显示"正在刷新…"（BOOT 单击时调用）
     void MarkWeatherRefreshing();

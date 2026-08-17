@@ -104,6 +104,7 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io,
     SetupForecastUI();
     SetupQuotaUI();
     SetupTodoUI();
+    SetupInfoUI();
     // 告诉显示框架：当前自定义 UI 已经初始化完成
     // 否则基类的 SetStatus/ShowNotification 会一直误判为“UI 未准备好”
     setup_ui_called_ = true;
@@ -340,6 +341,7 @@ void CustomLcdDisplay::ApplyDisplayMode() {
     if (forecast_page_) lv_obj_add_flag(forecast_page_, LV_OBJ_FLAG_HIDDEN);
     if (quota_page_) lv_obj_add_flag(quota_page_, LV_OBJ_FLAG_HIDDEN);
     if (todo_page_) lv_obj_add_flag(todo_page_, LV_OBJ_FLAG_HIDDEN);
+    if (info_page_) lv_obj_add_flag(info_page_, LV_OBJ_FLAG_HIDDEN);
 
     // 显示当前页面
     switch (display_mode_) {
@@ -360,6 +362,10 @@ void CustomLcdDisplay::ApplyDisplayMode() {
         case MODE_TODO:
             if (todo_page_) lv_obj_remove_flag(todo_page_, LV_OBJ_FLAG_HIDDEN);
             UpdateTodoPageInternal();
+            break;
+        case MODE_INFO:
+            if (info_page_) lv_obj_remove_flag(info_page_, LV_OBJ_FLAG_HIDDEN);
+            UpdateInfoPageInternal();
             break;
     }
 }
@@ -389,6 +395,7 @@ void CustomLcdDisplay::CycleDisplayMode() {
         else if (page.id == "forecast") enabled.push_back(MODE_FORECAST);
         else if (page.id == "quota") enabled.push_back(MODE_QUOTA);
         else if (page.id == "todo") enabled.push_back(MODE_TODO);
+        else if (page.id == "info") enabled.push_back(MODE_INFO);
     }
     if (enabled.empty()) enabled.push_back(MODE_OVERVIEW);
     auto current = std::find(enabled.begin(), enabled.end(), display_mode_);
@@ -402,6 +409,7 @@ void CustomLcdDisplay::CycleDisplayMode() {
         case MODE_FORECAST: name = "天气页"; break;
         case MODE_QUOTA: name = "AI页"; break;
         case MODE_TODO: name = "待办页"; break;
+        case MODE_INFO: name = "信息页"; break;
     }
     ESP_LOGI(TAG, "页面切换: %s", name);
 }
@@ -539,6 +547,7 @@ void CustomLcdDisplay::TickQuotaPage() {
         if (id == "forecast") return MODE_FORECAST;
         if (id == "quota") return MODE_QUOTA;
         if (id == "todo") return MODE_TODO;
+        if (id == "info") return MODE_INFO;
         return MODE_OVERVIEW;
     };
     bool current_enabled = false;
