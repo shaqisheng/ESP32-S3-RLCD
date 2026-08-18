@@ -28,6 +28,24 @@
 
 详细功能说明见 **[docs/功能文档.md](docs/功能文档.md)**。
 
+## 界面预览
+
+### 设备屏幕（400×300 1-bit RLCD，设备实拍截图）
+
+| 综合页 | 日历页 | 七日天气页 |
+|:---:|:---:|:---:|
+| ![综合页：时钟/农历/天气/待办/小智状态](docs/screenshots/page-overview.png) | ![日历页：月历/农历/节气/节假日](docs/screenshots/page-calendar.png) | ![七日天气页](docs/screenshots/page-forecast.png) |
+| **AI 额度页** | **待办页** | |
+| ![AI 额度页：账号卡片/额度进度/重置倒计时](docs/screenshots/page-quota.png) | ![待办页](docs/screenshots/page-todo.png) | |
+
+### 局域网后台（`http://<设备IP>:8080/admin`）
+
+| 概览（设备控制 / 音量 / 切页 / 运行状态） | AI 账号（额度账号管理） |
+|:---:|:---:|
+| ![后台概览](docs/screenshots/admin-overview.png) | ![AI 账号管理](docs/screenshots/admin-quota.png) |
+
+> 截图通过设备自带的 `/api/display/screenshot` 接口与浏览器实采，所见即真机当前界面。
+
 ## 硬件
 
 | 项 | 值 |
