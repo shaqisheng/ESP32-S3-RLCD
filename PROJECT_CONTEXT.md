@@ -183,7 +183,7 @@ xiaozhi-esp32/
 | `admin_server.{h,cc}` | 628 | 8080 端口 HTTP 服务、28 路由、密码+Cookie+CSRF、Bearer Token、内嵌前端 13.5 KB | 单会话；密码单轮 SHA-256（KDF 弱）；HTTP 明文（仅可信局域网） |
 | `quota_manager.{h,cc}` | 795 | 最多 32 额度账号，5 分钟串行刷新，6 类供应商适配，缓存 stale，页面配置 | NVS 明文存 secret（设计如此） |
 | `quota_proxy_transport.{h,cc}` | - | 无认证/带认证 HTTP CONNECT 自定义 transport，目标 TLS 强校验（`VERIFY_REQUIRED`） | 强校验 CA；诊断端点固定打 openai.com |
-| `weather_manager.{h,cc}` | 350 | 高德实时天气 + Open-Meteo 七日预报（含三日降级） | **已用 `ThreadSafeSnapshot` + `update_mutex_` 加锁**（HANDOFF 提到的 race 已修） |
+| `weather_manager.{h,cc}` | 350 | 和风天气新版接口（个人 API Host + API KEY 请求头）：实时 + 七日预报单源，失败保留旧快照 | **已用 `ThreadSafeSnapshot` + `update_mutex_` 加锁**（HANDOFF 提到的 race 已修） |
 | `calendar_manager.{h,cc}` | 281 | `holiday-cn` 节假日同步 + 板载 1900-2049 农历算法 + 24 节气近似公式 | 农历公式仅 1900-2049 有效 |
 | `todo_manager.{h,cc}` | 209 | CRUD + 旧 memo 迁移 | **`CommitValidatedUpdate` 原子提交 + `IsStrictIsoDate` 严格校验**（HANDOFF 提到的回滚/日期问题已修） |
 | `sensor_manager.{h,cc}` | - | SHTC3 温湿度 + PCF85063 RTC + NTP 同步 | 在用 |
@@ -224,7 +224,7 @@ GET/PUT /api/pages            页面顺序与启停
 GET/PUT /api/quotas           额度账号 CRUD（PUT 不回显 secret）
 GET/PUT /api/refresh-interval 刷新周期（1-60 分钟）
 GET/PUT /api/quota-display    AI 页显示配置（每屏卡数/翻页/固定页码）
-GET/PUT /api/weather          高德城市与 Key 配置（amap_key 不回显）
+GET/PUT /api/weather          和风城市与 API Host/Key 配置（qw_key 不回显）
 GET/PUT /api/calendar         节假日源
 GET/PUT /api/api-token        读取/写入 token
 GET/PUT /api/device           设备信息 / 音量（含 battery_low / low_battery_alert 全局低电量提示状态）
@@ -246,7 +246,7 @@ GET/PUT/DELETE /api/todos/{id}        单条 CRUD
 - 后台管理（账号/页面/天气/日历/待办/Token）
 - AI 额度自动刷新 + stale 缓存 + 每账号代理
 - Todo CRUD + Bearer Token + 旧 memo 迁移
-- 高德实时 + Open-Meteo 七日预报
+- 和风天气实时 + 七日预报（新版 v1 接口）
 - 节假日同步 + 板载农历/节气
 - **HANDOFF 提到的多个 P1 问题已在后续修复**：
   - WeatherManager 加锁（`ThreadSafeSnapshot` + `update_mutex_`）

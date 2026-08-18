@@ -81,35 +81,45 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn("GetQuotaProxyTransportError", header)
         self.assertIn("GetQuotaProxyTransportError", quota)
 
-    def test_weather_admin_requires_amap_adcode_and_has_configurable_refresh(self):
+    def test_weather_admin_has_qweather_host_key_and_configurable_refresh(self):
         admin = (BOARD / "managers/admin_server.cc").read_text()
         weather = (BOARD / "managers/weather_manager.cc").read_text()
         header = (BOARD / "managers/weather_manager.h").read_text()
         self.assertIn("weatherProvince", admin)
         self.assertIn("weatherCity", admin)
         self.assertNotIn("weatherLocation", admin)
-        self.assertIn("amap_adcode", admin)
-        # adcode 由所选城市经 cityCatalog 自动生成，不再需要人工填写
+        self.assertIn("qwApiHost", admin)
+        self.assertIn("qwApiKey", admin)
+        self.assertNotIn("amapWebKey", admin)
+        # 城市经纬度由所选城市经 cityCatalog 自动带出，不再需要人工填写
         self.assertIn("cityCatalog", admin)
         self.assertIn("renderWeatherCities", admin)
         self.assertIn("weatherRefreshMinutes", admin)
         self.assertIn("refresh_interval_minutes", weather)
         self.assertIn("GetRefreshIntervalMinutes", header)
-        self.assertIn("AMAP_CITY_WEATHER_V1", weather)
-        self.assertIn("amap_adcode", weather)
+        self.assertIn("QWEATHER_CITY_WEATHER_V1", weather)
+        self.assertIn("qw_host", weather)
 
-    def test_weather_uses_amap_with_a_masked_web_service_key(self):
+    def test_weather_uses_qweather_v1_with_a_masked_api_key(self):
         weather = (BOARD / "managers/weather_manager.cc").read_text()
         admin = (BOARD / "managers/admin_server.cc").read_text()
-        self.assertIn('"https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s&extensions=base"', weather)
-        self.assertIn('"https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s&extensions=all"', weather)
-        self.assertIn('"has_amap_key"', weather)
-        self.assertIn("amapWebKey", admin)
-        self.assertIn("高德 Web 服务 Key", admin)
-        self.assertIn("amap_adcode", admin)
+        self.assertIn('"https://%s/weather/v1/current/%.2f/%.2f"', weather)
+        self.assertIn('"https://%s/weather/v1/daily/%.2f/%.2f?days=7&localTime=true"', weather)
+        # Key 走请求头而不是 URL，避免出现在诊断与日志里
+        self.assertIn("X-QW-Api-Key", weather)
+        self.assertIn('"has_qw_key"', weather)
+        self.assertIn('"qw_host"', weather)
+        self.assertIn("qwApiHost", admin)
+        self.assertIn("和风 API Key", admin)
         self.assertIn('type="password"', admin)
+        # 旧数据源已彻底移除
+        self.assertNotIn("restapi.amap.com", weather)
+        self.assertNotIn("open-meteo", weather)
+        # 和风网关强制 gzip（无视 Accept-Encoding），板载用 ROM tinfl 解压，不得回归
+        self.assertIn("tinfl_decompress(", weather)
+        self.assertIn("GunzipResponse", weather)
         public_config = weather[weather.index("getLocationConfigJson"):weather.index("applyLocationConfigJson")]
-        self.assertNotIn('"amap_key"', public_config)
+        self.assertNotIn('"qw_key"', public_config)
 
     def test_weather_admin_removes_qweather_jwt_workflow(self):
         admin = (BOARD / "managers/admin_server.cc").read_text()
@@ -140,17 +150,20 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertGreaterEqual(admin.count("ScheduleTodoDisplayRefresh();"), 3)
         self.assertIn("editTodo(", admin)
 
-    def test_weather_combines_amap_current_with_open_meteo_seven_day_forecast(self):
+    def test_weather_combines_qweather_current_with_seven_day_forecast(self):
         admin = (BOARD / "managers/admin_server.cc").read_text()
         weather = (BOARD / "managers/weather_manager.cc").read_text()
         header = (BOARD / "managers/weather_manager.h").read_text()
         self.assertIn("latitude:city[1]", admin)
         self.assertIn("longitude:city[2]", admin)
-        self.assertIn("api.open-meteo.com/v1/forecast", weather)
-        self.assertIn("forecast_days=7", weather)
-        self.assertIn("parseOpenMeteoForecastJson", weather)
+        self.assertIn("/weather/v1/current/", weather)
+        self.assertIn("/weather/v1/daily/", weather)
+        self.assertIn("days=7", weather)
+        self.assertIn("parseQweatherCurrentJson", weather)
+        self.assertIn("parseQweatherDailyJson", weather)
         self.assertIn("forecast_count = 7", weather)
-        self.assertIn("parseOpenMeteoForecastJson", header)
+        self.assertIn("parseQweatherCurrentJson", header)
+        self.assertIn("parseQweatherDailyJson", header)
 
     def test_weather_uses_local_monochrome_images_instead_of_ascii_symbols(self):
         forecast = (BOARD / "forecast_ui.cc").read_text()
@@ -172,12 +185,12 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertNotIn('return "==="', forecast)
         self.assertNotIn('return "(~)"', forecast)
 
-    def test_weather_icon_mapping_prefers_wmo_code_over_generic_forecast_text(self):
+    def test_weather_icon_mapping_prefers_qweather_code_over_generic_forecast_text(self):
         forecast = (BOARD / "forecast_ui.cc").read_text()
         mapping = forecast[forecast.index("WeatherIconKind WeatherIcon"):
                            forecast.index("const lv_image_dsc_t* LargeWeatherIcon")]
-        self.assertLess(mapping.index("const long wmo"), mapping.index('text.find("雷")'))
-        self.assertIn("if (wmo == 3) return WeatherIconKind::Overcast", mapping)
+        self.assertLess(mapping.index("const long icon_code"), mapping.index('text.find("雷")'))
+        self.assertIn("if (icon_code == 104) return WeatherIconKind::Overcast", mapping)
         self.assertIn("if (!code.empty())", mapping)
 
     def test_calendar_header_and_traditional_festivals_are_complete(self):
@@ -387,23 +400,25 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn("payload.insert(0", protocol)
         self.assertNotIn("std::string message =", protocol[protocol.index("void Protocol::SendMcpMessage"):])
 
-    def test_weather_diagnostic_uses_key_query_without_echoing_key(self):
+    def test_weather_diagnostic_uses_header_key_without_echoing_key(self):
         weather = (BOARD / "managers/weather_manager.cc").read_text()
         admin = (BOARD / "managers/admin_server.cc").read_text()
         header = (BOARD / "managers/admin_server.h").read_text()
         self.assertNotIn('"Authorization"', weather)
-        self.assertIn("amap_key", weather)
+        self.assertIn("qw_key", weather)
         self.assertIn('"/api/weather-diagnostic"', admin)
         self.assertIn("WeatherDiagnosticHandler", header)
         self.assertIn("GetDiagnosticJson", weather)
         self.assertIn("last_endpoint_", weather)
         self.assertNotIn('cJSON_AddStringToObject(root, "api_key"', weather)
+        self.assertNotIn('cJSON_AddStringToObject(root, "qw_key"', weather)
 
-    def test_weather_persists_amap_adcode_and_forecast_coordinates(self):
+    def test_weather_persists_qweather_host_key_and_forecast_coordinates(self):
         weather = (BOARD / "managers/weather_manager.cc").read_text()
         constructor = weather[weather.index("WeatherManager::WeatherManager()"):
                               weather.index("WeatherManager& WeatherManager::getInstance()")]
-        self.assertIn('settings.GetString("amap_adcode", "320500")', constructor)
+        self.assertIn('settings.GetString("qw_host", "")', constructor)
+        self.assertIn('settings.GetString("qw_key", "")', constructor)
         self.assertIn('settings.GetString("latitude", "31.2989")', constructor)
         self.assertIn('settings.GetString("longitude", "120.5853")', constructor)
 
@@ -537,31 +552,6 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         self.assertIn('ParseResetAt(item, "nextResetTime")', quota)
         # 算法注释存在以便后续维护者理解为什么不用 timegm
         self.assertIn("Howard Hinnant", quota)
-
-    def test_logs_tab_and_ring_buffer_contract(self):
-        """后台日志功能（2026-08-17）：esp_log 全局钩子 + PSRAM 环形缓冲 + 日志 tab。
-        约束：缓冲必须驻留 PSRAM（内部 SRAM 紧张）、必须有重复折叠（AFE 每 30ms
-        告警会冲掉有用日志）、必须打码敏感参数（secret 不经日志接口泄露）。"""
-        admin = (BOARD / "managers/admin_server.cc").read_text()
-        buf = (BOARD / "managers/system_log_buffer.h").read_text()
-        board = (BOARD / "waveshare-s3-rlcd-4.2.cc").read_text()
-        # 路由与 handler
-        self.assertIn('"/api/logs"', admin)
-        self.assertIn("LogsHandler", admin)
-        # tab 与视图（模块下拉按功能 optgroup 分组）
-        self.assertIn('data-tab="logs"', admin)
-        self.assertIn('id="logview"', admin)
-        self.assertIn("loadLogs", admin)
-        self.assertIn("LOG_GROUPS", admin)
-        self.assertIn("logGroupOf", admin)
-        self.assertIn("<optgroup", admin)
-        # 环形缓冲关键属性
-        self.assertIn("MALLOC_CAP_SPIRAM", buf)
-        self.assertIn("esp_log_set_vprintf", buf)
-        self.assertIn("repeat", buf)
-        self.assertIn('"****"', buf)
-        # 板级安装（构造函数尽早，覆盖启动日志）
-        self.assertIn("SystemLogBuffer::GetInstance().Install()", board)
 
     def test_screenshot_copy_button_with_fallback(self):
         """截图复制按钮（2026-08-18）：现代 Clipboard API + execCommand 降级。

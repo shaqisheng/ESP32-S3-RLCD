@@ -33,7 +33,7 @@
 │ │  按键                  │ AdminServer:8080 (后台+REST API)              │ │
 │ │  LED                   │ QuotaManager (AI 额度轮询)                     │ │
 │ │  MCP 工具入口          │ QuotaProxyTransport (可选 HTTP CONNECT)       │ │
-│ │  OTA 回调              │ WeatherManager (高德+Open-Meteo)              │ │
+│ │  OTA 回调              │ WeatherManager (和风天气)                     │ │
 │ │                        │ CalendarManager (节假日+农历)                 │ │
 │ │                        │ TodoManager (CRUD)                            │ │
 │ │                        │ SensorManager (SHTC3+RTC)  SdcardManager     │ │
@@ -114,7 +114,7 @@ waveshare-s3-rlcd-4.2.cc            CustomBoard（组装点，单例）
       ├─ admin_server.{h,cc}        :8080 HTTP 服务（单例，被 Board::StartNetwork 启动）
       ├─ quota_manager.{h,cc}       AI 额度（单例）
       ├─ quota_proxy_transport.{h,cc} 自定义 transport
-      ├─ weather_manager.{h,cc}     高德+Open-Meteo
+      ├─ weather_manager.{h,cc}     和风天气（实时+七日）
       ├─ calendar_manager.{h,cc}    节假日+农历
       ├─ todo_manager.{h,cc}        待办
       ├─ sensor_manager.{h,cc}      SHTC3+RTC
@@ -213,7 +213,7 @@ GET /api/status:
 | 命名空间 | 分区 | 内容 | 持有者 |
 |---|---|---|---|
 | `wifi` / 系统键 | `nvs` (默认) | Wi-Fi SSID/密码、激活信息、OTA 状态 | 上游 |
-| `weather` | `nvs` | 省/市/adcode/lat/lng、amap_key | WeatherManager |
+| `weather` | `nvs` | 省/市/lat/lng、qw_host、qw_key | WeatherManager |
 | `calendar` | `nvs` | holiday year/days/synced/source | CalendarManager |
 | `todos` | `nvs` | Todo JSON 数组（≤32 条） | TodoManager |
 | `memo` | `nvs` | 旧备忘（首次启动自动迁移到 todos） | TodoManager |

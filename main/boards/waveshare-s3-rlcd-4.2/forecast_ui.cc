@@ -60,15 +60,16 @@ const lv_image_dsc_t* const kSmallWeatherIcons[] = {
 WeatherIconKind WeatherIcon(const std::string& code, const std::string& text) {
     if (!code.empty()) {
         char* end = nullptr;
-        const long wmo = strtol(code.c_str(), &end, 10);
+        const long icon_code = strtol(code.c_str(), &end, 10);
         if (end && *end == '\0') {
-            if (wmo == 0 || wmo == 100) return WeatherIconKind::Sunny;
-            if (wmo == 1 || wmo == 2) return WeatherIconKind::PartlyCloudy;
-            if (wmo == 3) return WeatherIconKind::Overcast;
-            if (wmo == 45 || wmo == 48) return WeatherIconKind::Fog;
-            if ((wmo >= 71 && wmo <= 77) || wmo == 85 || wmo == 86) return WeatherIconKind::Snow;
-            if (wmo >= 95 && wmo <= 99) return WeatherIconKind::Thunder;
-            if ((wmo >= 51 && wmo <= 67) || (wmo >= 80 && wmo <= 82)) return WeatherIconKind::Rain;
+            // 和风天气现象代码（dev.qweather.com/docs/api/weather/weather-conditions/）
+            if (icon_code == 100) return WeatherIconKind::Sunny;
+            if (icon_code >= 101 && icon_code <= 103) return WeatherIconKind::PartlyCloudy;
+            if (icon_code == 104) return WeatherIconKind::Overcast;
+            if (icon_code >= 302 && icon_code <= 304) return WeatherIconKind::Thunder;
+            if (icon_code >= 300 && icon_code <= 399) return WeatherIconKind::Rain;
+            if (icon_code >= 400 && icon_code <= 499) return WeatherIconKind::Snow;
+            if (icon_code >= 500 && icon_code <= 515) return WeatherIconKind::Fog;
             return WeatherIconKind::Unknown;
         }
     }

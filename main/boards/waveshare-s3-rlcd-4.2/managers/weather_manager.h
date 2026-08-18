@@ -29,7 +29,7 @@ struct WeatherData {
     bool valid = false;
 };
 
-// 天气管理器：通过和风天气坐标接口获取当前天气和七日预报。
+// 天气管理器：通过和风天气新版接口（个人 API Host + API KEY）获取当前天气和七日预报。
 class WeatherManager {
 public:
     static WeatherManager& getInstance();
@@ -65,8 +65,8 @@ private:
     struct WeatherConfig {
         std::string province = "江苏省";
         std::string city = "苏州市";
-        std::string amap_adcode = "320500";
-        std::string amap_key;
+        std::string qw_host;  // 和风个人 API Host，形如 xxxx.def.qweatherapi.com
+        std::string qw_key;   // 和风 API KEY（只写不读，不回显）
         double latitude = 31.2989;
         double longitude = 120.5853;
         uint32_t refresh_interval_minutes = 15;
@@ -84,8 +84,7 @@ private:
     std::string last_result_ = "尚未请求";
     bool last_request_ok_ = false;
     
-    bool parseAmapNowJson(const char* json_data, const WeatherConfig& config);
-    bool parseAmapForecastJson(const char* json_data);
-    bool parseOpenMeteoForecastJson(const char* json_data);
+    bool parseQweatherCurrentJson(const char* json_data, const WeatherConfig& config);
+    bool parseQweatherDailyJson(const char* json_data);
     void SetDiagnostic(int status, bool ok, const std::string& result);
 };
