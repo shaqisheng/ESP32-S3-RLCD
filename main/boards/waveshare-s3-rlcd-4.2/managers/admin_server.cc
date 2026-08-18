@@ -162,7 +162,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <div class="toolbar" style="margin:8px 0;justify-content:flex-start"><button onclick="wifiApStart(this)">启用 AP 热点</button><button onclick="wifiApStop()">停止 AP 热点</button></div>
 <div id="wifiApInfo" class="hint" style="display:none"></div>
 </section>
-<section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
+<section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a><button id="screenshotCopyBtn" style="display:none" onclick="copyScreenshot()">复制</button></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
 <section class="panel"><h2>待办 API</h2><p class="hint">局域网客户端使用 Authorization: Bearer &lt;token&gt;，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p><div id="apiToken" class="api-token">读取中…</div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="regenToken()">重新生成 Token</button></div></section>
 </div>
 <div class="tab-pane" data-pane="logs">
@@ -267,7 +267,30 @@ function renderNightCrossDay(){var s=Number(el("powerSaveNightStart").value),e=N
 async function loadPowerSave(){try{var d=await api("/api/power-save");el("powerSaveStatus").textContent=d.active?"已启用":"已关闭";el("powerSaveReason").textContent=d.active?(d.reason||"--"):"--";el("powerSaveThreshold").value=d.battery_threshold||20;el("powerSaveNightEnabled").checked=d.night_enabled||false;el("powerSaveRestDay").checked=d.rest_day_all_day||false;el("powerSaveToggleBtn").textContent=d.manual_override?"关闭省电模式":"开启省电模式";var opts=buildHourOptions();el("powerSaveNightStart").innerHTML=opts;el("powerSaveNightEnd").innerHTML=opts;el("powerSaveNightStart").value=d.night_start_hour||23;el("powerSaveNightEnd").value=d.night_end_hour||7;renderNightCrossDay()}catch(e){}}
 async function togglePowerSave(btn){var cur=btn.textContent==="关闭省电模式";try{await api("/api/power-save",{method:"PUT",body:JSON.stringify({manual_override:!cur,battery_threshold:Number(el("powerSaveThreshold").value),night_start_hour:Number(el("powerSaveNightStart").value),night_end_hour:Number(el("powerSaveNightEnd").value),night_enabled:el("powerSaveNightEnabled").checked,rest_day_all_day:el("powerSaveRestDay").checked})});toast(cur?"已关闭省电模式":"已开启省电模式");loadPowerSave()}catch(e){toast(e.message,true)}}
 async function savePowerSave(){try{await api("/api/power-save",{method:"PUT",body:JSON.stringify({manual_override:el("powerSaveToggleBtn").textContent==="关闭省电模式",battery_threshold:Number(el("powerSaveThreshold").value),night_start_hour:Number(el("powerSaveNightStart").value),night_end_hour:Number(el("powerSaveNightEnd").value),night_enabled:el("powerSaveNightEnabled").checked,rest_day_all_day:el("powerSaveRestDay").checked})});toast("省电配置已保存")}catch(e){toast(e.message,true)}}
-async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();var url=URL.createObjectURL(blob);el("screenshotImg").src=url;el("screenshotLink").href=url;el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
+var lastShotBlob=null,lastShotDataUrl=null;
+async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();lastShotBlob=blob;
+el("screenshotLink").href=URL.createObjectURL(blob);
+// 预览图必须用 data URL（base64 内嵌 PNG 数据）而不是 blob: 引用——
+// execCommand 复制的是 <img> 的 HTML，blob: URL 离开本页即失效，
+// 粘贴目标只能拿到 alt 文字；data URL 让复制的 HTML 自带完整图像。
+var dataUrl=await new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result)};fr.onerror=rej;fr.readAsDataURL(blob)});
+el("screenshotImg").src=dataUrl;lastShotDataUrl=dataUrl;
+el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";el("screenshotCopyBtn").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
+async function copyScreenshot(){var img=el("screenshotImg");if(!img.src||!lastShotBlob){toast("请先截取屏幕",true);return}
+if(navigator.clipboard&&window.ClipboardItem){try{await navigator.clipboard.write([new ClipboardItem({"image/png":lastShotBlob})]);toast("已复制到剪贴板");return}catch(e){}}
+// HTTP 局域网降级：copy 事件劫持（非安全上下文也可写剪贴板）。
+// 选中 <img> + execCommand 的路线已在实机上证明不可靠——部分浏览器/粘贴目标
+// 只拿到 text/plain（即 alt 文字"截图预览"）。改为在 copy 事件里直接覆写：
+// text/html = 内嵌完整 base64 PNG 的 <img>（微信/飞书/备忘录等富应用粘贴出图片），
+// text/plain = 明确提示（纯文本目标不再看到莫名其妙的 alt 文字）。
+var html='<img src="'+lastShotDataUrl+'" style="image-rendering:pixelated">';
+var hint="设备屏幕截图（如未显示图片，请用「下载」或右键图片→复制图片）";
+var fired=false;
+function onCopy(e){e.clipboardData.setData("text/html",html);e.clipboardData.setData("text/plain",hint);e.preventDefault();fired=true}
+document.addEventListener("copy",onCopy,{once:true});
+var ok=false;try{ok=document.execCommand("copy")}catch(e){}
+document.removeEventListener("copy",onCopy);
+if(ok&&fired)toast("已复制到剪贴板");else toast("复制失败：浏览器不支持（可右键图片复制或用下载）",true)}
 function renderDisplaySwitches(){var sorted=pages.slice().sort(function(a,b){return a.order-b.order});var h="";sorted.forEach(function(p){if(p.enabled)h+='<button onclick="switchPage(\''+p.id+'\')">'+(names[p.id]||p.id)+'</button>'});h+='<button onclick="switchPage(\'toggle\')">下一页</button>';el("displaySwitches").innerHTML=h}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
 async function saveQuotaDisplay(){var cards=Number(el("quotaCardsPerPage").value),adv=Number(el("quotaAutoAdvance").value),fp=Number(el("quotaForcePage").value);if(!Number.isInteger(cards)||cards<1||cards>4){toast("每屏卡片数必须为 1-4",true);return}if(!Number.isInteger(adv)||adv<0||adv>120){toast("自动翻页间隔必须为 0-120 秒",true);return}try{await api("/api/quota-display",{method:"PUT",body:JSON.stringify({cards_per_page:cards,auto_advance_seconds:adv,force_page:fp})});toast("AI 页显示配置已保存")}catch(e){toast(e.message,true)}}

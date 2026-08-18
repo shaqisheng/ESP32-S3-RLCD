@@ -563,6 +563,25 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         # 板级安装（构造函数尽早，覆盖启动日志）
         self.assertIn("SystemLogBuffer::GetInstance().Install()", board)
 
+    def test_screenshot_copy_button_with_fallback(self):
+        """截图复制按钮（2026-08-18）：现代 Clipboard API + execCommand 降级。
+        HTTP 局域网是非安全上下文（isSecureContext=false，navigator.clipboard 与
+        ClipboardItem 均为 undefined），必须保留 execCommand('copy') 选中 <img>
+        的降级路径，否则复制在局域网后台必然失败。"""
+        admin = (BOARD / "managers/admin_server.cc").read_text()
+        self.assertIn('id="screenshotCopyBtn"', admin)
+        self.assertIn("copyScreenshot", admin)
+        self.assertIn("ClipboardItem", admin)
+        self.assertIn('execCommand("copy")', admin)
+        self.assertIn("lastShotBlob", admin)
+        # 预览图必须用 data URL 内嵌图像数据——blob: 引用复制出页面即失效，
+        # 粘贴目标只会拿到 alt 文字（"截图预览"），2026-08-18 用户实测回归
+        self.assertIn("readAsDataURL", admin)
+        # 必须走 copy 事件劫持覆写剪贴板（非安全上下文可写）——选中 <img> +
+        # execCommand 的路线已实机证明不可靠（粘贴出 alt 文字而非图片）
+        self.assertIn('addEventListener("copy",onCopy', admin)
+        self.assertIn('setData("text/html"', admin)
+
     def test_global_low_battery_alert_contract(self):
         """全局低电量提示（2026-08-18）：
         - lv_layer_top 悬浮条（所有页面共享），不逐页实现

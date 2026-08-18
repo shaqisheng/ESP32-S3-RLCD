@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-08-18 — 后台截图面板新增「复制」按钮（现代 API + copy 事件劫持降级）
+
+- **修改内容**：`admin_server.cc` 屏幕截图面板下载按钮旁新增「复制」按钮（截图成功后与下载一起出现）。复制实现两层：①`navigator.clipboard.write(ClipboardItem)`（现代 API，仅 HTTPS/localhost 可用）；②HTTP 局域网降级——**copy 事件劫持**：`document.addEventListener('copy')` 里 `clipboardData.setData('text/html', '<img src="data:image/png;base64,...">')` + `setData('text/plain', 提示语)` + `preventDefault()`，然后 `execCommand('copy')` 触发。预览图 `<img>` 同步改为 data URL（`readAsDataURL`）承载图像数据。
+- **修改原因**：用户需求——截图后一键复制到剪贴板。两次实机回归才定型：
+  1. 后台是 HTTP 局域网（`isSecureContext=false`，`navigator.clipboard`/`ClipboardItem` 均为 undefined），现代 API 必然缺席；
+  2. 首选的"选中 `<img>` + execCommand"路线实机粘贴只得到 alt 文字"截图预览"——该路线剪贴板只有 text/plain（alt）与指向页面的 HTML 引用（`blob:` URL 离开页面即失效）；
+  3. copy 事件劫持是**非安全上下文下唯一可控剪贴板内容的途径**，且 `clipboardData.setData` 只支持文本类型（text/html、text/plain），无法写入原生图片味——富文本粘贴目标（微信/飞书/备忘录等）经 HTML 渲染出图片，纯文本目标得到明确提示语。
+- **影响范围**：仅后台截图面板交互；无设备侧变化。
+- **测试结果**：
+  - idf.py build: ✅
+  - 契约测试: ✅ 50/50（断言 `readAsDataURL` + copy 事件劫持存在，防回归）；JS 语法检查: ✅
+  - 机制验证: ✅ chromium 模拟 HTTP 环境（clipboard/ClipboardItem 置空）：execCommand 触发后剪贴板 text/html 含完整 `data:image/png;base64` 图像数据、text/plain 为提示语
+  - 真机验证: ⏳ 用户两次实测粘贴仍得文本味（第一次 alt 文字、第二次提示语）——判定其粘贴目标只取 text/plain 或其浏览器未把 HTML 味落板；**技术边界：HTTP 页面无法写原生图片味**
+  - 兜底方案: ①右键预览图→复制图片（浏览器原生，任何应用可粘）；②`scripts/admin-local-proxy.py`（新增，零依赖 TCP 转发）——经 `http://localhost:8080/admin` 访问获得安全上下文，ClipboardItem 生效，「复制」按钮写原生 PNG
+- **回滚方式**：git revert 对应 commit
+- **关联文档**：`scripts/admin-local-proxy.py` 头部注释
+
+---
+
 ## 2026-08-18 — 全局低电量提示（所有页面悬浮条 + 后台横幅 + 5 分钟无交互自动隐藏 + 交互重现）
 
 - **修改内容**：
