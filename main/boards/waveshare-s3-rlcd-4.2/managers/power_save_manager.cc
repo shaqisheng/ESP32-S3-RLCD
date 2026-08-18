@@ -3,8 +3,10 @@
 #include <cJSON.h>
 #include <esp_log.h>
 #include <esp_pm.h>
+#include <esp_wifi.h>
 #include <nvs_flash.h>
 #include <nvs.h>
+#include <soc/rtc.h>
 
 #include <cstring>
 #include <ctime>
@@ -19,6 +21,21 @@ namespace {
 constexpr const char* TAG = "PowerSaveMgr";
 constexpr const char* kPartition = "quota_nvs";
 constexpr const char* kNamespace = "power_save";
+
+// 效果回读：把省电动作的实际状态打出来，方便在日志 tab 验证（只读，不改状态）
+void LogActualPowerState(const char* phase) {
+    // CPU 实际频率（不是配置值，是当前运行值）
+    rtc_cpu_freq_config_t freq_cfg;
+    rtc_clk_cpu_freq_get_config(&freq_cfg);
+    // WiFi PS 实际状态（0=NONE, 1=MIN_MODEM, 2=MAX_MODEM）
+    wifi_ps_type_t ps = WIFI_PS_NONE;
+    const esp_err_t ps_err = esp_wifi_get_ps(&ps);
+    ESP_LOGI(TAG, "省电状态回读[%s]：CPU=%dMHz, WiFi PS=%s(%d)",
+             phase, (int)freq_cfg.freq_mhz,
+             ps_err == ESP_OK ? (ps == WIFI_PS_MAX_MODEM ? "MAX_MODEM" :
+                                 ps == WIFI_PS_MIN_MODEM ? "MIN_MODEM" : "NONE")
+                              : "读取失败", (int)ps);
+}
 
 // cJSON 辅助（与 quota_manager 等保持一致的宽松解析）
 std::string JsonString(cJSON* obj, const char* key, const char* fallback = "") {
@@ -74,19 +91,22 @@ void PowerSaveManager::SetActive(bool active, const char* reason) {
         // 2. Wi-Fi 降到最大省电（DTIM 延长）
         Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
         ESP_LOGI(TAG, "Wi-Fi 省电已启用（LOW_POWER / MAX_MODEM）");
-        // 3. CPU 降频到 80MHz
+        // 3. CPU 降频到 80MHz（依赖 CONFIG_PM_ENABLE——此前未启用导致这里一直静默失败）
         esp_pm_config_esp32s3_t pm_cfg;
         pm_cfg.max_freq_mhz = 80;
         pm_cfg.min_freq_mhz = 80;
         pm_cfg.light_sleep_enable = false;
-        if (esp_pm_configure(&pm_cfg) == ESP_OK) {
+        const esp_err_t pm_err = esp_pm_configure(&pm_cfg);
+        if (pm_err == ESP_OK) {
             ESP_LOGI(TAG, "CPU 已降频到 80MHz");
         } else {
-            ESP_LOGW(TAG, "CPU 降频失败（可能 esp_pm 未启用）");
+            ESP_LOGW(TAG, "CPU 降频失败: %s", esp_err_to_name(pm_err));
         }
         // 4. 关闭 AFE 语音唤醒（只保留 BOOT 按钮手动启动对话）
         Application::GetInstance().GetAudioService().EnableWakeWordDetection(false);
         ESP_LOGI(TAG, "AFE 语音唤醒已关闭");
+        // 效果回读：验证上述动作真正落到硬件状态
+        LogActualPowerState("进入");
     } else {
         enter_at_.store(0);
         ESP_LOGI(TAG, "退出省电模式");
@@ -95,20 +115,25 @@ void PowerSaveManager::SetActive(bool active, const char* reason) {
             QuotaManager::GetInstance().SetRefreshIntervalMinutesRuntime(orig_quota_interval_minutes_);
             ESP_LOGI(TAG, "刷新间隔已恢复 quota=%d 分钟", (int)orig_quota_interval_minutes_);
         }
-        // 恢复 Wi-Fi PS（用 BALANCED 而不是 LOW_POWER，平衡性能）
-        Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::BALANCED);
-        ESP_LOGI(TAG, "Wi-Fi 省电已恢复（BALANCED）");
+        // 恢复 Wi-Fi PS。注意：应用的日常基线就是 LOW_POWER（application.cc
+        // 激活完成即设为 LOW_POWER），此前退出省电设成 BALANCED 反而比基线更耗电。
+        Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
+        ESP_LOGI(TAG, "Wi-Fi 省电已恢复（LOW_POWER，应用基线）");
         // 恢复 CPU 频率到 240MHz
         esp_pm_config_esp32s3_t pm_cfg;
         pm_cfg.max_freq_mhz = 240;
         pm_cfg.min_freq_mhz = 240;
         pm_cfg.light_sleep_enable = false;
-        if (esp_pm_configure(&pm_cfg) == ESP_OK) {
+        const esp_err_t pm_err = esp_pm_configure(&pm_cfg);
+        if (pm_err == ESP_OK) {
             ESP_LOGI(TAG, "CPU 已恢复到 240MHz");
+        } else {
+            ESP_LOGW(TAG, "CPU 恢复失败: %s", esp_err_to_name(pm_err));
         }
         // 恢复 AFE 语音唤醒
         Application::GetInstance().GetAudioService().EnableWakeWordDetection(true);
         ESP_LOGI(TAG, "AFE 语音唤醒已恢复");
+        LogActualPowerState("退出");
     }
 }
 

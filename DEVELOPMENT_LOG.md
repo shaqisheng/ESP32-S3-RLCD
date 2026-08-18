@@ -6,6 +6,29 @@
 
 ---
 
+## 2026-08-17 — 修复省电模式两处失效/反效问题 + 日志模块下拉按功能分组
+
+- **修改内容**：
+  1. **省电修复**（`power_save_manager.cc`、`sdkconfig`/`sdkconfig.defaults`）：
+     - `CONFIG_PM_ENABLE=y`——此前未启用，`esp_pm_configure` 静默返回 `ESP_ERR_NOT_SUPPORTED`，"CPU 降频到 80MHz" 从未真正发生（日志里一直是"CPU 降频失败"）。
+     - `esp_pm_configure` 失败改打真实错误码（`esp_err_to_name`），不再写猜测文案。
+     - 新增 `LogActualPowerState()` 效果回读：进入/退出省电时打印 CPU 实际频率（`rtc_clk_cpu_freq_get_config`）与 WiFi PS 实际状态（`esp_wifi_get_ps`）。
+     - 退出省电的 WiFi PS 从 `BALANCED` 改为 `LOW_POWER`——应用的日常基线就是 LOW_POWER（application.cc 激活完成即设置），设 BALANCED 反而比基线更耗电。
+     - 核查 application.cc 9 处 SetPowerSaveLevel：会话/音乐/OTA 时短暂升 PERFORMANCE、结束回落 LOW_POWER，与省电模式不冲突，无需改动。
+  2. **日志分组**（`admin_server.cc` 内嵌 JS）：日志 tab 模块下拉按功能 `optgroup` 分组（系统/AI 助手/天气/日历/待办/音频/网络/显示/电源·硬件/其他，10 组，`LOG_GROUPS` + `logGroupOf` 映射，未命中进"其他"）。
+  3. 契约测试新增 `test_power_save_actually_applies_and_reads_back`，日志契约补分组断言（48/48 通过）。
+- **修改原因**：①用户要求验证省电模式是否有实际效果——审查+真机发现 CPU 降频从未生效（esp_pm 未启用）、退出后 WiFi 比应用基线更耗电；②用户要求日志模块下拉具体到功能分组。
+- **影响范围**：省电模式开启后 CPU 真正降到 80MHz（主要耗电项）；退出后 WiFi 回到应用基线 MAX_MODEM；日志 tab 下拉出现分组标题。无 NVS 结构变化。
+- **测试结果**：
+  - idf.py build: ✅（第一次因 `rtc_clk_cpu_freq_get_config` 在 S3 是出参形式编译失败，已修正）
+  - 契约测试: ✅ 48/48；JS 语法检查: ✅
+  - 真机验证: ✅ 手动开启省电→日志回读 `CPU=80MHz, WiFi PS=MAX_MODEM(2)`；手动退出→回读 `CPU=240MHz, WiFi PS=MAX_MODEM(2)`（应用基线）；浏览器验证下拉分组 `系统(4) | AI 助手(5) | 天气(1) | 音频(12) | 网络(7) | 显示(1) | 电源/硬件(2) | 其他(9)`，按模块筛选联动正常
+  - app 分区使用率: 95%（无显著变化）
+- **回滚方式**：git revert 对应 commit（注意 sdkconfig 本地未跟踪，需同步改回 `# CONFIG_PM_ENABLE is not set`）
+- **关联文档**：无（行为修复 + 既有功能增强，架构文档不涉及）
+
+---
+
 ## 2026-08-17 — 后台新增日志查看功能（esp_log 全局钩子 + PSRAM 环形缓冲 + 日志 tab）
 
 - **修改内容**：
