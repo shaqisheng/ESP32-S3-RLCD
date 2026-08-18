@@ -6,6 +6,26 @@
 
 ---
 
+## 2026-08-17 — 后台新增日志查看功能（esp_log 全局钩子 + PSRAM 环形缓冲 + 日志 tab）
+
+- **修改内容**：
+  1. 新增 `managers/system_log_buffer.h`（header-only）：`esp_log_set_vprintf` 全局钩子，把全系统日志（全部模块：天气/AI/日历/待办/Wi-Fi/音频/系统等）写入 PSRAM 环形缓冲（256 条 × 约 172B ≈ 45KB PSRAM，不占内部 SRAM）。每条含启动毫秒、级别、TAG、文本；连续重复行折叠为 `repeat` 计数（防 AFE 每 30ms 告警刷屏）；`key=/token=/password=/secret=` 参数值打码为 `****` 防 secret 经日志接口泄露。JSON 序列化在自旋锁外（锁内只拷贝单条，避免临界区 malloc）。
+  2. `waveshare-s3-rlcd-4.2.cc` 构造函数首行 `SystemLogBuffer::Install()`（非网络服务，尽早覆盖启动日志）。
+  3. `admin_server.{h,cc}`：`GET /api/logs?after=<seq>&limit=N`（Cookie 读鉴权，增量拉取，chunked 发送）；kAdminHtml 新增「日志」tab：模块/级别筛选、3 秒自动刷新开关、手动刷新、黑底终端风日志区（时间|级别|模块|信息），风格与设计稿 `docs/mockups/admin-logs-v1.html` 一致。
+  4. 契约测试新增 `test_logs_tab_and_ring_buffer_contract`（47/47 通过）；内嵌 JS 经 `node --check`。
+- **修改原因**：用户需求——后台可查看系统所有日志（含且不限于天气/AI/日历），带时间、模块、日志信息。
+- **影响范围**：新增只读功能，不改任何现有行为；UART 日志输出不变（钩子先原样透传）。
+- **测试结果**：
+  - idf.py build: ✅ ×2（第二次为 %lld 修复）
+  - 契约测试: ✅ 47/47；JS 语法检查: ✅ node --check
+  - 真机验证: ✅ 烧录后串口 60 秒无 abort/reboot（free ~95KB / minimal ~89KB）；`GET /api/logs` 返回合法 JSON（seq/t/lv/tag/text/r 字段齐全，dropped/capacity 正确）；浏览器端到端（playwright 登录 → 日志 tab）：600 行渲染、模块下拉真实 TAG、自动刷新增量追加、截图确认风格
+  - 踩坑修复：`CONFIG_NEWLIB_NANO_FORMAT=y` 不支持 `%lld`（输出 "ld" 并错位 varargs）→ epoch 改 `%u` 打印
+  - app 分区使用率: 95%（无显著变化）
+- **回滚方式**：git revert 对应 commit
+- **关联文档**：`PROJECT_CONTEXT.md` §5.5（/api/logs）；`ARCHITECTURE.md` §6.2；设计稿 `docs/mockups/admin-logs-v1.html`
+
+---
+
 ## 2026-08-17 — Info 页内存改"使用/全部" + 后台 SRAM 显示与 info 页对齐
 
 - **修改内容**：

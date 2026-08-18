@@ -240,6 +240,7 @@ PSRAM 充足不代表 SPI/DMA 可用的内部 heap 充足。最初的日历/天�
 - 显示帧缓冲与 LUT 全部放 PSRAM；
 - SPI 按 1 KB 分片，`ESP_ERR_NO_MEM` 重试 3 次。
 - 联网响应缓冲（天气/额度各 16KB）只分配 PSRAM，失败时报错而不是 fallback 到内部 SRAM。
+- **系统日志环形缓冲驻留 PSRAM**（2026-08-17 起）：`system_log_buffer.h` 用 `esp_log_set_vprintf` 全局钩子把全系统日志写入 256 条 × ~172B 的 PSRAM 环形缓冲，供后台「日志」tab 与 `GET /api/logs` 读取。钩子在所有日志上下文运行：只做事先分配的本地格式化 + 自旋锁内单条拷贝（**临界区内禁止 malloc/snprintf**）；连续重复行折叠为计数防刷屏（AFE 每 30ms 告警）；`key=/token=/password=/secret=` 打码防 secret 泄露。
 
 ### 6.3 安全基元统一到 header-only
 

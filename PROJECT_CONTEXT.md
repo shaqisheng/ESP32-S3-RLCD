@@ -230,6 +230,7 @@ GET/PUT /api/api-token        读取/写入 token
 GET/PUT /api/device           设备信息 / 音量
 POST   /api/display/switch    立即切换显示页面
 GET    /api/display/screenshot 屏幕截图
+GET    /api/logs?after&limit  系统日志（PSRAM 环形缓冲 256 条，增量拉取，敏感参数已打码）
 GET/POST/PUT/DELETE /api/wifi*  Wi-Fi 管理（列表/新增/默认/切换/断开/AP/删除）
 GET/POST      /api/todos              待办列表
 GET/PUT/DELETE /api/todos/{id}        单条 CRUD

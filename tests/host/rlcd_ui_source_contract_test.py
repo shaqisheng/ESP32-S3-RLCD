@@ -538,6 +538,31 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         # 算法注释存在以便后续维护者理解为什么不用 timegm
         self.assertIn("Howard Hinnant", quota)
 
+    def test_logs_tab_and_ring_buffer_contract(self):
+        """后台日志功能（2026-08-17）：esp_log 全局钩子 + PSRAM 环形缓冲 + 日志 tab。
+        约束：缓冲必须驻留 PSRAM（内部 SRAM 紧张）、必须有重复折叠（AFE 每 30ms
+        告警会冲掉有用日志）、必须打码敏感参数（secret 不经日志接口泄露）。"""
+        admin = (BOARD / "managers/admin_server.cc").read_text()
+        buf = (BOARD / "managers/system_log_buffer.h").read_text()
+        board = (BOARD / "waveshare-s3-rlcd-4.2.cc").read_text()
+        # 路由与 handler
+        self.assertIn('"/api/logs"', admin)
+        self.assertIn("LogsHandler", admin)
+        # tab 与视图（模块下拉按功能 optgroup 分组）
+        self.assertIn('data-tab="logs"', admin)
+        self.assertIn('id="logview"', admin)
+        self.assertIn("loadLogs", admin)
+        self.assertIn("LOG_GROUPS", admin)
+        self.assertIn("logGroupOf", admin)
+        self.assertIn("<optgroup", admin)
+        # 环形缓冲关键属性
+        self.assertIn("MALLOC_CAP_SPIRAM", buf)
+        self.assertIn("esp_log_set_vprintf", buf)
+        self.assertIn("repeat", buf)
+        self.assertIn('"****"', buf)
+        # 板级安装（构造函数尽早，覆盖启动日志）
+        self.assertIn("SystemLogBuffer::GetInstance().Install()", board)
+
     def test_parse_iso8601_handles_real_kimi_response_format(self):
         """算法自检：用 Python datetime 求权威 Unix 秒，
         对应 C++ 端 ParseIso8601ToUnix("2026-08-11T15:53:05Z") 应得到相同值。

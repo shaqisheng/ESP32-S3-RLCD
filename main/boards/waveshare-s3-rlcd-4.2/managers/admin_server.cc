@@ -19,6 +19,7 @@
 
 #include "quota_manager.h"
 #include "power_save_manager.h"
+#include "system_log_buffer.h"
 #include "sdcard_manager.h"
 #include "sensor_manager.h"
 #include "ssid_manager.h"
@@ -102,10 +103,20 @@ input,select{width:100%;font:inherit;border:1px solid var(--line);border-radius:
 button.loading{pointer-events:none;background:var(--muted)!important;color:var(--paper)!important}button.success{background:var(--good)!important;color:#fff!important;border-color:var(--good)!important}.spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}@keyframes spin{to{transform:rotate(360deg)}}
 .modal-bg{position:fixed;inset:0;background:rgba(16,17,15,0.6);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:8vh 20px 20px}.modal-bg.open{display:flex}.modal{background:var(--paper);border:2px solid var(--line);box-shadow:8px 8px 0 var(--signal);padding:22px;width:480px;max-width:100%}.modal h3{font-size:15px;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid;padding-bottom:8px;margin-bottom:16px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px dashed #aaa}
 .header-right{display:flex;align-items:center;gap:14px}.header-right button{background:transparent;color:var(--paper);border:1px solid #555;box-shadow:none;padding:6px 12px;font-size:11px;font-weight:600}.header-right button:hover{background:var(--signal);color:var(--ink);border-color:var(--signal)}
+.log-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.log-toolbar .fld{display:flex;flex-direction:column;gap:4px}
+.log-toolbar select{width:170px}
+.log-meta{margin-left:auto;font-size:11px;color:var(--muted);align-self:flex-end;padding-bottom:9px}
+.logview{border:2px solid var(--line);background:var(--ink);color:#d6d9cf;height:420px;overflow-y:auto;padding:8px 10px;font-size:12px;line-height:1.75}
+.log-line{display:grid;grid-template-columns:86px 34px 118px 1fr;gap:10px;white-space:pre-wrap;word-break:break-all}
+.log-time{color:#8a8e82}
+.lv-I{color:#d6d9cf}.lv-W{color:var(--signal);font-weight:800}.lv-E{color:#ff6b5e;font-weight:800}.lv-D{color:#72756d}
+.log-tag{color:#9fd0ff}
+.repeat{color:var(--signal);font-weight:800}
 </style></head><body><div class="shell"><header><div class="brand">RLCD <i>/</i> CONTROL</div><div class="header-right"><div class="meta"><span id="ip">LOCAL DEVICE</span><br><span id="clock">OFFLINE</span></div><button id="logoutBtn" class="hidden">退出</button></div></header>
 <main><section id="auth" class="auth"><h1 id="authTitle">管理员登录</h1><p class="hint" id="authHint">局域网设备管理。会话闲置 30 分钟后失效。</p><div class="field"><label>用户名<input id="user" value="admin" disabled></label></div><div class="field"><label>密码<input id="password" type="password" autocomplete="current-password"></label></div><button class="primary" id="authBtn">登录</button></section>
 <section id="dashboard" class="hidden">
-<div class="tabs"><div class="tab active" data-tab="overview" onclick="switchTab('overview')">概览</div><div class="tab" data-tab="accounts" onclick="switchTab('accounts')">AI 账号</div><div class="tab" data-tab="todo" onclick="switchTab('todo')">待办</div><div class="tab" data-tab="integ" onclick="switchTab('integ')">集成</div><div class="tab" data-tab="system" onclick="switchTab('system')">系统</div></div>
+<div class="tabs"><div class="tab active" data-tab="overview" onclick="switchTab('overview')">概览</div><div class="tab" data-tab="accounts" onclick="switchTab('accounts')">AI 账号</div><div class="tab" data-tab="todo" onclick="switchTab('todo')">待办</div><div class="tab" data-tab="integ" onclick="switchTab('integ')">集成</div><div class="tab" data-tab="system" onclick="switchTab('system')">系统</div><div class="tab" data-tab="logs" onclick="switchTab('logs')">日志</div></div>
 <div class="tab-pane active" data-pane="overview">
 <section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用 SRAM</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低 SRAM</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>可用 PSRAM</small><b id="devicePsram">--</b></div><div class="device-stat"><small>WiFi 信号</small><b id="deviceRssi">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div><div class="device-stat"><small>电池</small><b id="deviceBattery">--</b></div><div class="device-stat"><small>SD 卡</small><b id="deviceSd">--</b></div><div class="device-stat"><small>机内温度</small><b id="deviceTemp">--</b></div><div class="device-stat"><small>机内湿度</small><b id="deviceHumi">--</b></div><div class="device-stat"><small>固件版本</small><b id="deviceFw">--</b></div><div class="device-stat"><small>运行分区</small><b id="devicePartition">--</b></div></div><p class="hint" id="deviceMeta" style="margin:0 0 14px">芯片 -- · Flash -- · CPU -- · 蓝牙 -- · MAC --</p><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面 · 立即切换</label><div id="displaySwitches" class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"></div><p class="hint">仅显示已启用的页面，与下方"页面编排"联动；点击立即切换设备屏幕</p><hr><label>运行状态</label><div id="runStatus" class="status">读取状态…</div></section>
 <section class="panel"><h2>页面编排</h2><div id="pages"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="primary" id="savePages">保存页面顺序</button></div></section>
@@ -122,7 +133,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <section class="panel"><div class="toolbar"><h2 style="border:0;margin:0">待办事项 <span id="todoCount" class="badge">0</span></h2><button onclick="openTodoModal()">＋ 新增待办</button></div><div id="todos"></div></section>
 </div>
 <div class="tab-pane" data-pane="integ">
-<section class="panel"><h2>城市天气</h2><p class="hint">高德提供国内实时天气，Open-Meteo 按所选城市坐标提供七日预报。选择城市后自动匹配高德 adcode，无需手填。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>高德 Web 服务 Key<input id="amapWebKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearAmapKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存高德 Key</label><p id="weatherKeyState" class="hint">高德 Key 不会回显</p><p class="hint" style="margin-top:4px">上次刷新：<span id="weatherLastRefresh">--</span></p><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="refreshWeather(this)">立即刷新天气</button><button onclick="weatherDiagnostic()">查看天气诊断</button></div><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
+<section class="panel"><h2>城市天气</h2><p class="hint">和风天气按所选城市坐标提供实时天气与七日预报，选择城市后自动匹配坐标，无需手填。API Host 与 Key 在 console.qweather.com 项目凭据中创建（凭据类型选 API KEY）。</p><div class="manage-grid"><div class="field"><label>省份<select id="weatherProvince" onchange="renderWeatherCities(this.value)"></select></label></div><div class="field"><label>城市<select id="weatherCity"></select></label></div></div><div class="field"><label>和风 API Host<input id="qwApiHost" type="text" autocomplete="off" placeholder="xxxx.def.qweatherapi.com"></label></div><div class="field"><label>和风 API Key<input id="qwApiKey" type="password" autocomplete="new-password" placeholder="留空保留已保存 Key"></label></div><div class="field"><label>天气自动刷新（分钟）<input id="weatherRefreshMinutes" type="number" min="5" max="120" step="1"></label></div><label class="hint"><input id="weatherClearQwKey" type="checkbox" style="width:auto;margin-right:8px">清除已保存的和风 Key</label><p id="weatherKeyState" class="hint">和风 Key 不会回显</p><p class="hint" style="margin-top:4px">上次刷新：<span id="weatherLastRefresh">--</span></p><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveWeather()" class="primary">保存并安排立即检测</button><button onclick="refreshWeather(this)">立即刷新天气</button><button onclick="weatherDiagnostic()">查看天气诊断</button></div><pre id="weatherDiagnostic" class="status">尚未检查</pre></section>
 <section class="panel"><h2>日历与节假日</h2><div class="field"><label>年度 JSON 数据源<input id="holidaySource"></label></div><div id="holidayStatus" class="hint"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button onclick="saveCalendar()">保存数据源</button> <button onclick="syncCalendar()" class="primary">立即同步</button></div></section>
 </div>
 <div class="tab-pane" data-pane="system">
@@ -151,6 +162,19 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 </section>
 <section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
 <section class="panel"><h2>待办 API</h2><p class="hint">局域网客户端使用 Authorization: Bearer &lt;token&gt;，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p><div id="apiToken" class="api-token">读取中…</div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="regenToken()">重新生成 Token</button></div></section>
+</div>
+<div class="tab-pane" data-pane="logs">
+<section class="panel"><h2>设备日志</h2>
+<div class="log-toolbar">
+<div class="fld"><label>模块</label><select id="logTagFilter" onchange="renderLogs()"><option value="">全部模块</option></select></div>
+<div class="fld"><label>级别</label><select id="logLevelFilter" onchange="renderLogs()"><option value="">全部</option><option value="E">仅错误 E</option><option value="W">警告 W 及以上</option><option value="I">信息 I 及以上</option></select></div>
+<div class="fld"><label>&nbsp;</label><button class="primary" onclick="loadLogs(true)">⟳ 刷新</button></div>
+<div class="fld"><label>&nbsp;</label><button id="logAutoBtn" onclick="toggleLogAuto()">自动刷新：开（3s）</button></div>
+<div class="log-meta" id="logMeta">环形缓冲读取中…</div>
+</div>
+<div class="logview" id="logview"></div>
+<p class="hint">数据来自 esp_log 全局钩子的 PSRAM 环形缓冲（256 条），含全部模块；连续重复行折叠为 ×N；key=/token=/password=/secret= 参数值已自动打码</p>
+</section>
 </div>
 </section></main></div>
 <div class="modal-bg" id="todoModal"><div class="modal"><h3 id="todoModalTitle">新增待办</h3><div class="field"><label>内容<input id="todoModalContent" placeholder="例如：给花浇水"></label></div><div class="manage-grid"><div class="field"><label>日期（可留空）<input id="todoModalDate" placeholder="YYYY-MM-DD"></label></div><div class="field"><label>时间（可留空）<input id="todoModalTime" placeholder="HH:MM"></label></div></div><div class="modal-actions"><button onclick="closeTodoModal()">取消</button><button class="primary" id="todoModalSave" onclick="submitTodoModal()">保存</button></div></div></div>
@@ -212,7 +236,7 @@ function showDash(){el("auth").classList.add("hidden");el("dashboard").classList
 async function boot(){try{var s=await api("/api/status");if(s.setup_required){showAuth(true);return}if(!s.authenticated){showAuth(false);return}csrf=s.csrf||"";showDash();await loadAll()}catch(e){showAuth(false)}}
 async function login(){var p=el("password").value;if(p.length<8){toast("密码至少 8 位",true);return}try{var d=await api(setupMode?"/api/setup":"/api/login",{method:"POST",body:JSON.stringify({password:p})});csrf=d.csrf||"";el("password").value="";showDash();await loadAll()}catch(e){toast(e.message,true)}}
 async function loadAll(){var q=await api("/api/quotas"),p=await api("/api/pages");items=q.items||[];items.forEach(keyFor);pages=p.pages||[];editingKey="";dirty=false;el("saveQuotas").textContent="保存全部更改";renderPages();renderDisplaySwitches();renderQuotas();await loadExtras();await status()}
-async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent=w.has_amap_key?"高德 Web 服务 Key 已保存（不会回显）":"请配置高德 Web 服务 Key";var wlr=w.last_refresh_completed_at||0;el("weatherLastRefresh").textContent=wlr>0?new Date(wlr*1000).toLocaleString():"尚未刷新";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;try{var qd=await api("/api/quota-display");el("quotaCardsPerPage").value=qd.cards_per_page||4;renderForcePageOptions();el("quotaAutoAdvance").value=qd.auto_advance_seconds||10;el("quotaForcePage").value=qd.force_page||0}catch(e){}await loadDevice();await loadWifi();await loadPowerSave()}
+async function loadExtras(){var t=await api("/api/todos"),w=await api("/api/weather"),c=await api("/api/calendar"),k=await api("/api/api-token"),r=await api("/api/refresh-interval");todos=t.items||[];renderTodos();renderWeatherProvinces(w.province||"江苏省",w.city||"苏州市");el("qwApiHost").value=w.qw_host||"";el("weatherRefreshMinutes").value=w.refresh_interval_minutes||15;el("weatherClearQwKey").checked=false;el("weatherKeyState").textContent=w.has_qw_key?"和风 API Key 已保存（不会回显）":"请配置和风 API Key";var wlr=w.last_refresh_completed_at||0;el("weatherLastRefresh").textContent=wlr>0?new Date(wlr*1000).toLocaleString():"尚未刷新";el("holidaySource").value=c.source||"";el("holidayStatus").textContent=c.cached_year?("已缓存 "+c.cached_year+" 年数据") : "尚未同步";el("apiToken").textContent=k.token||"生成失败";el("quotaRefreshMinutes").value=r.minutes||5;try{var qd=await api("/api/quota-display");el("quotaCardsPerPage").value=qd.cards_per_page||4;renderForcePageOptions();el("quotaAutoAdvance").value=qd.auto_advance_seconds||10;el("quotaForcePage").value=qd.force_page||0}catch(e){}await loadDevice();await loadWifi();await loadPowerSave()}
 function memStatus(bytes,isInternal){var b=Number(bytes||0);var label,danger=false;if(isInternal){if(b<20*1024){label="危险";danger=true}else if(b<30*1024){label="紧张";danger=true}else{label="正常"}}else{if(b<512*1024){label="危险";danger=true}else if(b<2*1024*1024){label="紧张";danger=true}else{label="充足"}}var num=b>=1024*1024?(b/1024/1024).toFixed(1)+" MB":(b/1024).toFixed(1)+" KB";return{txt:label+" "+num,danger:danger}}
 function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=el(elId);e.textContent=s.txt;e.style.color=s.danger?"var(--bad)":""}
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
@@ -261,7 +285,7 @@ async function toggleTodo(id,done){await api("/api/todos/"+id,{method:"PUT",body
 async function deleteTodo(id){if(!confirm("删除这条待办？"))return;await api("/api/todos/"+id,{method:"DELETE"});loadExtras()}
 function renderWeatherProvinces(selectedProvince,selectedCity){var provinces=Object.keys(cityCatalog);el("weatherProvince").innerHTML=provinces.map(function(p){return '<option value="'+esc(p)+'" '+(p===selectedProvince?'selected':'')+'>'+esc(p)+'</option>'}).join("");if(!cityCatalog[selectedProvince])selectedProvince=provinces[0];el("weatherProvince").value=selectedProvince;renderWeatherCities(selectedProvince,selectedCity)}
 function renderWeatherCities(province,selectedCity){var cities=cityCatalog[province]||[];el("weatherCity").innerHTML=cities.map(function(c,i){return '<option value="'+i+'" '+(c[0]===selectedCity?'selected':'')+'>'+esc(c[0])+'</option>'}).join("")}
-async function saveWeather(){var province=el("weatherProvince").value,cities=cityCatalog[province]||[],city=cities[Number(el("weatherCity").value)],minutes=Number(el("weatherRefreshMinutes").value);if(!city){toast("请选择城市",true);return}var adcode=city[3]||"";if(!/^\d{6}$/.test(adcode)){toast("所选城市暂无 adcode 数据",true);return}if(!Number.isInteger(minutes)||minutes<5||minutes>120){toast("天气刷新间隔必须为 5–120 分钟",true);return}var key=el("amapWebKey").value;await api("/api/weather",{method:"PUT",body:JSON.stringify({province:province,city:city[0],latitude:city[1],longitude:city[2],amap_adcode:adcode,amap_key:key,clear_amap_key:el("weatherClearAmapKey").checked,refresh_interval_minutes:minutes})});el("amapWebKey").value="";el("weatherClearAmapKey").checked=false;el("weatherKeyState").textContent="高德配置已保存（Key 不会回显）";toast("配置已保存，设备空闲后立即检测")}
+async function saveWeather(){var province=el("weatherProvince").value,cities=cityCatalog[province]||[],city=cities[Number(el("weatherCity").value)],minutes=Number(el("weatherRefreshMinutes").value);if(!city){toast("请选择城市",true);return}var host=el("qwApiHost").value.trim();if(!/^[a-zA-Z0-9.-]{1,100}$/.test(host)){toast("请填写有效的和风 API Host",true);return}if(!Number.isInteger(minutes)||minutes<5||minutes>120){toast("天气刷新间隔必须为 5–120 分钟",true);return}var key=el("qwApiKey").value;await api("/api/weather",{method:"PUT",body:JSON.stringify({province:province,city:city[0],latitude:city[1],longitude:city[2],qw_host:host,qw_key:key,clear_qw_key:el("weatherClearQwKey").checked,refresh_interval_minutes:minutes})});el("qwApiKey").value="";el("weatherClearQwKey").checked=false;el("weatherKeyState").textContent="和风配置已保存（Key 不会回显）";toast("配置已保存，设备空闲后立即检测")}
 async function weatherDiagnostic(){var box=el("weatherDiagnostic");box.textContent="正在读取最近一次天气请求…";try{var d=await api("/api/weather-diagnostic");box.textContent="接口："+(d.endpoint||"未请求")+"\nHTTP："+(d.http_status||"未请求")+"\n结果："+(d.result||"无返回");box.className="status "+(d.ok?"ok":"bad")}catch(e){box.textContent="诊断失败："+e.message;box.className="status bad"}}
 async function refreshWeather(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{await api("/api/weather/refresh",{method:"POST"});btn.classList.add("success");btn.textContent="✓";toast("天气刷新请求已排队");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast(e.message,true)}}
 async function proxyDiagnostic(){var box=el("proxyDiagnostic");box.textContent="正在检查 TCP、CONNECT、TLS…";try{var d=await api("/api/proxy-diagnostic",{method:"POST"});box.textContent="端点："+(d.endpoint||"未配置")+"\n阶段："+(d.stage||"未知")+"\n结果："+(d.message||"无返回");box.className="status "+(d.tcp_connected?"ok":"bad")}catch(e){box.textContent="诊断失败："+e.message;box.className="status bad"}}
@@ -293,6 +317,36 @@ el("refreshBtn").onclick=async function(){try{await api("/api/refresh",{method:"
 boot();setInterval(status,5000);
 el("todoModal").addEventListener("click",function(e){if(e.target===el("todoModal"))closeTodoModal()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeTodoModal()});
+// ===== 日志 tab =====
+var logLatestSeq=0,logAuto=true,logTimer=null,logTags={};
+// 模块分组：tag → 功能组（设备上实际出现过的 tag；未命中进"其他"）
+var LOG_GROUPS=[
+["系统",["SystemInfo","Application","DataUpdate","Ota","boot","cpu_start","heap_init","spi_flash","memory_layout","system_api","main_task","uart","partition"]],
+["AI 助手",["QuotaManager","MCP","MQTT","HttpClient","esp-tls","esp-x509-crt-bundle","websocket","WS"]],
+["天气",["WeatherManager"]],
+["日历",["CalendarManager"]],
+["待办",["TodoManager"]],
+["音频",["AFE","AFE_CONFIG","AfeWakeWord","AudioCodec","AudioService","I2S_IF","ES7210","ES8311","BoxAudioCodec","Adev_Codec","MODEL_LOADER","Assets","EmojiCollection","i2s_common"]],
+["网络",["wifi","wifi_init","WifiStation","WifiManager","esp_netif_lwip","httpd_txrx","httpd_uri","HTTP_CLIENT","AdminServer","lwip","mdns"]],
+["显示",["CustomDisplay","LVGL","RlcdDriver","WeatherUI","Display"]],
+["电源/硬件",["PowerSaveMgr","SensorManager","SdcardManager","i2c.master","gpio","adc"]]];
+function logGroupOf(tag){for(var i=0;i<LOG_GROUPS.length;i++){if(LOG_GROUPS[i][1].indexOf(tag)>=0)return LOG_GROUPS[i][0]}return"其他"}
+function escHtml(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+async function loadLogs(manual){try{var d=await api("/api/logs?after="+logLatestSeq+"&limit=100");var box=el("logview"),added=0;d.entries.forEach(function(e){var tag=e.tag||"?";logTags[tag]=1;var div=document.createElement("div");div.className="log-line";div.dataset.lv=e.lv;div.dataset.tag=tag;var t=new Date(e.t*1000);var p=function(n){return String(n).padStart(2,"0")};div.innerHTML='<span class="log-time">'+p(t.getHours())+":"+p(t.getMinutes())+":"+p(t.getSeconds())+'</span><span class="lv-'+e.lv+'">'+e.lv+'</span><span class="log-tag">'+escHtml(tag)+'</span><span>'+escHtml(e.text)+(e.r>1?' <span class="repeat">×'+e.r+'</span>':"")+'</span>';box.appendChild(div);added++});
+if(d.latest_seq>logLatestSeq)logLatestSeq=d.latest_seq;
+while(box.children.length>600)box.removeChild(box.firstChild);
+var sel=el("logTagFilter"),cur=sel.value,byGroup={};
+Object.keys(logTags).forEach(function(t){var g=logGroupOf(t);(byGroup[g]=byGroup[g]||[]).push(t)});
+var html='<option value="">全部模块</option>';
+LOG_GROUPS.map(function(g){return g[0]}).concat(["其他"]).forEach(function(g){var tags=(byGroup[g]||[]).sort();if(!tags.length)return;html+='<optgroup label="'+g+'">'+tags.map(function(t){return'<option value="'+escHtml(t)+'">'+escHtml(t)+"</option>"}).join("")+"</optgroup>"});
+sel.innerHTML=html;sel.value=cur;
+el("logMeta").textContent="缓冲 "+d.capacity+" 条 · 溢出 "+d.dropped+" 条 · 序列 #"+d.latest_seq;
+renderLogs();if(added>0)box.scrollTop=box.scrollHeight}catch(e){if(manual)toast(e.message,true)}}
+function renderLogs(){var lv=el("logLevelFilter").value,tag=el("logTagFilter").value,rank={E:3,W:2,I:1,D:0,V:0},min=lv?rank[lv]:-1;document.querySelectorAll("#logview .log-line").forEach(function(l){var ok=(lv==="E"?l.dataset.lv==="E":(!lv||(rank[l.dataset.lv]||0)>=min))&&(!tag||l.dataset.tag===tag);l.style.display=ok?"grid":"none"})}
+function toggleLogAuto(){logAuto=!logAuto;el("logAutoBtn").textContent=logAuto?"自动刷新：开（3s）":"自动刷新：关";if(logAuto)scheduleLogAuto();else if(logTimer){clearTimeout(logTimer);logTimer=null}}
+function scheduleLogAuto(){if(logTimer)clearTimeout(logTimer);logTimer=setTimeout(async function(){if(logAuto&&document.querySelector('.tab[data-tab="logs"]').classList.contains("active"))await loadLogs(false);scheduleLogAuto()},3000)}
+var _origSwitchTab=switchTab;switchTab=function(n){_origSwitchTab(n);if(n==="logs"&&logLatestSeq===0)loadLogs(true)};
+scheduleLogAuto();
 </script></body></html>)HTML";
 
 AdminServer* Self(httpd_req_t* req) {
@@ -583,6 +637,7 @@ bool AdminServer::Start() {
         {"/api/wifi/ap/start", HTTP_POST, WifiApStartHandler, this},
         {"/api/wifi/ap/stop", HTTP_POST, WifiApStopHandler, this},
         {"/api/wifi/*", HTTP_DELETE, WifiDeleteHandler, this},
+        {"/api/logs", HTTP_GET, LogsHandler, this},
     };
     for (const auto& route : routes) {
         esp_err_t err = httpd_register_uri_handler(server_, &route);
@@ -608,6 +663,37 @@ esp_err_t AdminServer::PageHandler(httpd_req_t* req) {
         const size_t n = std::min(kChunk, total - offset);
         if (httpd_resp_send_chunk(req, kAdminHtml + offset, n) != ESP_OK) {
             httpd_resp_send_chunk(req, nullptr, 0);  // 结束 chunked 响应
+            return ESP_FAIL;
+        }
+    }
+    return httpd_resp_send_chunk(req, nullptr, 0);
+}
+
+esp_err_t AdminServer::LogsHandler(httpd_req_t* req) {
+    auto* self = Self(req);
+    if (!self->IsAuthorized(req, false)) return Error(req, 401, "未登录");
+    // 查询参数：after=<seq>（增量）与 limit（默认 50，上限 100）
+    uint32_t after = 0;
+    int limit = 50;
+    char query[64];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char value[12];
+        if (httpd_query_key_value(query, "after", value, sizeof(value)) == ESP_OK) {
+            after = (uint32_t)strtoul(value, nullptr, 10);
+        }
+        if (httpd_query_key_value(query, "limit", value, sizeof(value)) == ESP_OK) {
+            limit = atoi(value);
+        }
+    }
+    const std::string body = SystemLogBuffer::GetInstance().ToJson(after, limit);
+    httpd_resp_set_type(req, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    // 100 条日志约 20KB，与 PageHandler 同理用 chunked send 防止慢网截断
+    const size_t kChunk = 4096;
+    for (size_t offset = 0; offset < body.size(); offset += kChunk) {
+        const size_t n = std::min(kChunk, body.size() - offset);
+        if (httpd_resp_send_chunk(req, body.data() + offset, n) != ESP_OK) {
+            httpd_resp_send_chunk(req, nullptr, 0);
             return ESP_FAIL;
         }
     }

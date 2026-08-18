@@ -22,6 +22,7 @@
 #include "managers/quota_manager.h"
 #include "managers/power_save_manager.h"
 #include "managers/admin_server.h"
+#include "managers/system_log_buffer.h"
 
 // 声明小智字体（用于系统信息显示时临时切换字体大小）
 LV_FONT_DECLARE(font_puhui_14_1);
@@ -288,7 +289,7 @@ private:
 
     void InitializeTools() {
         auto& mcp_server = McpServer::GetInstance();
-        // 此板型的天气已由高德后台任务更新，不向 AI 暴露音乐、主题和天气回写工具。
+        // 此板型的天气已由和风后台任务更新，不向 AI 暴露音乐、主题和天气回写工具。
         mcp_server.DisableTool("self.music.play_url");
         mcp_server.DisableTool("self.screen.set_theme");
         mcp_server.DisableTool("self.weather.update");
@@ -748,7 +749,9 @@ private:
     }
 
 public:
-    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), user_button_(USER_BUTTON_GPIO) {    
+    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), user_button_(USER_BUTTON_GPIO) {
+        // 日志缓冲钩子尽早安装（非网络服务，构造函数允许），尽量覆盖启动阶段日志
+        SystemLogBuffer::GetInstance().Install();
         InitializeI2c();
         InitializeSensors();  // 在 I2C 初始化后立即初始化传感器
         InitializeSdcard();   // SD 卡初始化（白噪音播放需要）
