@@ -563,6 +563,32 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         # 板级安装（构造函数尽早，覆盖启动日志）
         self.assertIn("SystemLogBuffer::GetInstance().Install()", board)
 
+    def test_global_low_battery_alert_contract(self):
+        """全局低电量提示（2026-08-18）：
+        - lv_layer_top 悬浮条（所有页面共享），不逐页实现
+        - 5 分钟无交互自动隐藏（复用 IDLE_TIMEOUT_MS）+ 交互重现（NotifyUserActivity）
+        - 后台写操作与硬件按钮都算用户活动；/api/device 暴露 low_battery_alert
+        - 旧的 sensor_label_ 反色告警（low_battery_alert_active）不得回归"""
+        display_cc = (BOARD / "custom_lcd_display.cc").read_text()
+        display_h = (BOARD / "custom_lcd_display.h").read_text()
+        weather_ui = (BOARD / "weather_ui.cc").read_text()
+        admin = (BOARD / "managers/admin_server.cc").read_text()
+        update = (BOARD / "data_update_task.cc").read_text()
+        self.assertIn("lv_layer_top()", display_cc)
+        self.assertIn("low_batt_overlay_", display_h)
+        self.assertIn("SetupLowBatteryOverlay();", weather_ui)
+        self.assertIn("UpdateLowBatteryAlertInternal", display_cc)
+        self.assertIn("UpdateLowBatteryAlertInternal(cached_battery_level", update)
+        self.assertIn("IDLE_TIMEOUT_MS", display_cc)
+        # 交互路径：后台写操作接入用户活动（按钮侧在板级已接入）
+        self.assertIn("display->NotifyUserActivity()", admin)
+        # 后台字段与横幅
+        self.assertIn('"low_battery_alert"', admin)
+        self.assertIn('id="lowBattBanner"', admin)
+        self.assertIn("lowbatt-banner", admin)
+        # 旧实现不得回归
+        self.assertNotIn("low_battery_alert_active", update)
+
     def test_power_save_actually_applies_and_reads_back(self):
         """省电模式必须真正生效（2026-08-17 回归）：
         - CONFIG_PM_ENABLE 必须启用，否则 esp_pm_configure 静默返回

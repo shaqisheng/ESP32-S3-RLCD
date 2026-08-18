@@ -163,6 +163,13 @@ private:
     std::atomic<bool> power_saving_{false};     // 是否处于省电模式
     uint32_t last_activity_ms_ = 0;             // 上次用户活动的时间（tick 毫秒）
     static const uint32_t IDLE_TIMEOUT_MS = 5 * 60 * 1000;  // 5 分钟无活动进入省电
+
+    // 全局低电量提示状态（窗口时长复用 IDLE_TIMEOUT_MS，与"5 分钟无活动"同一概念）
+    lv_obj_t* low_batt_overlay_ = nullptr;        // lv_layer_top 悬浮条（所有页面之上）
+    lv_obj_t* low_batt_overlay_label_ = nullptr;
+    uint32_t low_batt_trigger_ms_ = 0;            // 本轮低电量首次触发时刻（0=未触发）
+    bool low_batt_eligible_ = false;              // 放电且 <20%（充电或 ≥25% 复位）
+    bool low_batt_alert_visible_ = false;         // 当前悬浮条是否可见（供后台 /api/device）
     static const int NORMAL_REFRESH_MS = 1000;  // 正常刷新间隔 1 秒
     static const int SAVING_REFRESH_MS = 5000;  // 省电刷新间隔 5 秒
     
@@ -216,7 +223,16 @@ public:
     // 省电模式：记录用户活动，唤醒省电模式
     void NotifyUserActivity();
     bool IsPowerSaving() const { return power_saving_; }
-    
+
+    // 全局低电量提示（所有页面之上的 lv_layer_top 悬浮条 + 后台横幅数据）：
+    // 放电且 <20% 触发；窗口锚点 = max(触发时刻, last_activity_ms_)，无交互 5 分钟自动隐藏；
+    // 隐藏后任何用户活动（按钮/AI 对话/后台写操作，均走 NotifyUserActivity）重新计时显示；
+    // 充电或回升 ≥25% 消失并复位。
+    void SetupLowBatteryOverlay();
+    void UpdateLowBatteryAlertInternal(int level, bool charging, bool discharging);
+    bool IsLowBatteryAlertVisible() const { return low_batt_alert_visible_; }
+    bool IsLowBatteryEligible() const { return low_batt_eligible_; }
+
     // 重写小智的 AI 显示方法，适配到左下角卡片
     virtual void SetChatMessage(const char* role, const char* content) override;
     virtual void SetEmotion(const char* emotion) override;

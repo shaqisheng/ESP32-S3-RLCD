@@ -113,10 +113,12 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 .lv-I{color:#d6d9cf}.lv-W{color:var(--signal);font-weight:800}.lv-E{color:#ff6b5e;font-weight:800}.lv-D{color:#72756d}
 .log-tag{color:#9fd0ff}
 .repeat{color:var(--signal);font-weight:800}
+.lowbatt-banner{border:2px solid var(--bad);background:#fff;color:var(--bad);font-weight:900;font-size:14px;padding:10px 14px;margin-bottom:16px;box-shadow:4px 4px 0 var(--bad)}
 </style></head><body><div class="shell"><header><div class="brand">RLCD <i>/</i> CONTROL</div><div class="header-right"><div class="meta"><span id="ip">LOCAL DEVICE</span><br><span id="clock">OFFLINE</span></div><button id="logoutBtn" class="hidden">退出</button></div></header>
 <main><section id="auth" class="auth"><h1 id="authTitle">管理员登录</h1><p class="hint" id="authHint">局域网设备管理。会话闲置 30 分钟后失效。</p><div class="field"><label>用户名<input id="user" value="admin" disabled></label></div><div class="field"><label>密码<input id="password" type="password" autocomplete="current-password"></label></div><button class="primary" id="authBtn">登录</button></section>
 <section id="dashboard" class="hidden">
 <div class="tabs"><div class="tab active" data-tab="overview" onclick="switchTab('overview')">概览</div><div class="tab" data-tab="accounts" onclick="switchTab('accounts')">AI 账号</div><div class="tab" data-tab="todo" onclick="switchTab('todo')">待办</div><div class="tab" data-tab="integ" onclick="switchTab('integ')">集成</div><div class="tab" data-tab="system" onclick="switchTab('system')">系统</div><div class="tab" data-tab="logs" onclick="switchTab('logs')">日志</div></div>
+<div id="lowBattBanner" class="lowbatt-banner hidden">⚠ 设备电量低（<b id="lowBattPct">--</b>%），请及时充电（5 分钟无操作自动收起，任意操作后再次提示）</div>
 <div class="tab-pane active" data-pane="overview">
 <section class="device-control"><h2>设备控制</h2><div class="device-stats"><div class="device-stat"><small>运行时间</small><b id="deviceUptime">--</b></div><div class="device-stat"><small>可用 SRAM</small><b id="deviceHeap">--</b></div><div class="device-stat"><small>最低 SRAM</small><b id="deviceMinHeap">--</b></div><div class="device-stat"><small>可用 PSRAM</small><b id="devicePsram">--</b></div><div class="device-stat"><small>WiFi 信号</small><b id="deviceRssi">--</b></div><div class="device-stat"><small>网络地址</small><b id="deviceIp">--</b></div><div class="device-stat"><small>电池</small><b id="deviceBattery">--</b></div><div class="device-stat"><small>SD 卡</small><b id="deviceSd">--</b></div><div class="device-stat"><small>机内温度</small><b id="deviceTemp">--</b></div><div class="device-stat"><small>机内湿度</small><b id="deviceHumi">--</b></div><div class="device-stat"><small>固件版本</small><b id="deviceFw">--</b></div><div class="device-stat"><small>运行分区</small><b id="devicePartition">--</b></div></div><p class="hint" id="deviceMeta" style="margin:0 0 14px">芯片 -- · Flash -- · CPU -- · 蓝牙 -- · MAC --</p><label>扬声器音量</label><div class="volume-row"><input id="volumeSlider" type="range" min="0" max="100" step="1" oninput="showVolume(this.value)"><b id="volumeValue">--</b><button onclick="saveVolume()">应用</button><button id="muteBtn" onclick="toggleMute()">静音</button></div><hr><label>显示页面 · 立即切换</label><div id="displaySwitches" class="volume-row" style="grid-template-columns:none;gap:6px;flex-wrap:wrap;display:flex"></div><p class="hint">仅显示已启用的页面，与下方"页面编排"联动；点击立即切换设备屏幕</p><hr><label>运行状态</label><div id="runStatus" class="status">读取状态…</div></section>
 <section class="panel"><h2>页面编排</h2><div id="pages"></div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="primary" id="savePages">保存页面顺序</button></div></section>
@@ -242,7 +244,7 @@ function setMem(elId,bytes,isInternal){var s=memStatus(bytes,isInternal);var e=e
 function sizeText(bytes){var b=Number(bytes||0);if(b>=1024*1024*1024)return (b/1024/1024/1024).toFixed(1)+" GB";if(b>=1024*1024)return (b/1024/1024).toFixed(1)+" MB";if(b>=1024)return (b/1024).toFixed(1)+" KB";return b+" B"}
 function uptimeText(seconds){seconds=Number(seconds||0);var d=Math.floor(seconds/86400),h=Math.floor(seconds%86400/3600),m=Math.floor(seconds%3600/60);return (d?d+"天 ":"")+h+"小时 "+m+"分"}
 function showVolume(value){value=Number(value);el("volumeValue").textContent=value+"%";el("muteBtn").textContent=value===0?"恢复":"静音"}
-async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);setMem("deviceHeap",d.free_heap,true);setMem("deviceMinHeap",d.minimum_free_heap,true);setMem("devicePsram",d.free_psram,false);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceBattery").textContent=(d.battery_level==null||d.battery_level<0)?"未检测":(d.battery_level+"%"+(d.battery_charging?" 充电":(d.battery_discharging?" 放电":"")));el("deviceTemp").textContent=(d.temperature_c==null)?"--":(Number(d.temperature_c).toFixed(1)+" °C");el("deviceHumi").textContent=(d.humidity_pct==null)?"--":(Number(d.humidity_pct).toFixed(0)+" %");el("deviceSd").textContent=d.sd_mounted?(sizeText(d.sd_free_bytes)+" / "+sizeText(d.sd_total_bytes)):"未挂载";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · CPU "+(d.cpu_freq_mhz||"?")+" MHz · 蓝牙 "+(d.bluetooth_enabled?"已启用":"未启用")+" · MAC "+(d.mac||"?");var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume)}
+async function loadDevice(){var d=await api("/api/device");el("deviceUptime").textContent=uptimeText(d.uptime_seconds);setMem("deviceHeap",d.free_heap,true);setMem("deviceMinHeap",d.minimum_free_heap,true);setMem("devicePsram",d.free_psram,false);el("deviceRssi").textContent=(!d.wifi_rssi||d.wifi_rssi>=0)?"未连接":(d.wifi_rssi+" dBm");el("deviceIp").textContent=d.ip||"未联网";el("deviceFw").textContent=d.firmware_version||"?";el("devicePartition").textContent=d.running_partition||"?";el("deviceBattery").textContent=(d.battery_level==null||d.battery_level<0)?"未检测":(d.battery_level+"%"+(d.battery_charging?" 充电":(d.battery_discharging?" 放电":"")));el("deviceTemp").textContent=(d.temperature_c==null)?"--":(Number(d.temperature_c).toFixed(1)+" °C");el("deviceHumi").textContent=(d.humidity_pct==null)?"--":(Number(d.humidity_pct).toFixed(0)+" %");el("deviceSd").textContent=d.sd_mounted?(sizeText(d.sd_free_bytes)+" / "+sizeText(d.sd_total_bytes)):"未挂载";el("deviceMeta").textContent="芯片 "+(d.chip_model||"?")+" · Flash "+(d.flash_size_mb||0)+" MB · CPU "+(d.cpu_freq_mhz||"?")+" MHz · 蓝牙 "+(d.bluetooth_enabled?"已启用":"未启用")+" · MAC "+(d.mac||"?");var volume=Math.max(0,Math.min(100,Number(d.volume)||0));el("volumeSlider").value=volume;if(volume>0)lastAudibleVolume=volume;showVolume(volume);var lbb=el("lowBattBanner");if(d.low_battery_alert){el("lowBattPct").textContent=d.battery_level;lbb.classList.remove("hidden")}else{lbb.classList.add("hidden")}}
 async function saveVolume(){var volume=Number(el("volumeSlider").value);await api("/api/device",{method:"PUT",body:JSON.stringify({volume:volume})});if(volume>0)lastAudibleVolume=volume;showVolume(volume);toast("音量已设置为 "+volume+"%")}
 async function toggleMute(){var current=Number(el("volumeSlider").value);if(current>0)lastAudibleVolume=current;el("volumeSlider").value=current>0?0:Math.max(1,lastAudibleVolume);await saveVolume()}
 async function switchPage(mode){try{await api("/api/display/switch",{method:"POST",body:JSON.stringify({mode:mode})});toast("已切换："+(names[mode]||(mode==="toggle"?"下一页":mode)))}catch(e){toast(e.message,true)}}
@@ -565,6 +567,13 @@ bool AdminServer::IsAuthorized(httpd_req_t* req, bool csrf) {
     if (now_us - session_last_persisted_us_ > kSessionPersistIntervalUs) {
         SaveSession();
         session_last_persisted_us_ = now_us;
+    }
+    // Cookie+CSRF 的写操作 = 真实人在后台操作（区别于自动轮询 GET 与 Bearer 自动化）：
+    // 记为用户活动，驱动全局低电量提示的"交互重现"（与硬件按钮同一机制）。
+    // 注意不能在 HTTP 线程直接碰 LVGL——NotifyUserActivity 只写时间戳和标志位，无 LVGL 调用。
+    if (csrf) {
+        auto* display = static_cast<CustomLcdDisplay*>(Board::GetInstance().GetDisplay());
+        if (display) display->NotifyUserActivity();
     }
     return true;
 }
@@ -1049,6 +1058,12 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
         cJSON_AddBoolToObject(root, "battery_discharging", battery_discharging);
     } else {
         cJSON_AddNumberToObject(root, "battery_level", -1);
+    }
+    // 全局低电量提示状态（设备端悬浮条同款状态机）：battery_low=处于低电量区间，
+    // low_battery_alert=提示当前可见（5 分钟无交互会自动隐藏，交互后重现）
+    if (auto* display = static_cast<CustomLcdDisplay*>(Board::GetInstance().GetDisplay())) {
+        cJSON_AddBoolToObject(root, "battery_low", display->IsLowBatteryEligible());
+        cJSON_AddBoolToObject(root, "low_battery_alert", display->IsLowBatteryAlertVisible());
     }
     // 温湿度：SHTC3 I2C 读取（~10ms）。
     auto sensor = SensorManager::getInstance().getTempHumidity();

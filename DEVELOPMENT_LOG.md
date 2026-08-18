@@ -6,6 +6,27 @@
 
 ---
 
+## 2026-08-18 — 全局低电量提示（所有页面悬浮条 + 后台横幅 + 5 分钟无交互自动隐藏 + 交互重现）
+
+- **修改内容**：
+  1. `custom_lcd_display.{h,cc}`：新增 `SetupLowBatteryOverlay()`——在 `lv_layer_top()` 创建 400×22 白底黑边悬浮条（所有页面共享，页面切换不受影响）；`UpdateLowBatteryAlertInternal()` 状态机：放电且 <20% 触发（播一次提示音，对齐原版行为），充电或 ≥25% 复位；可见窗口 = `max(触发时刻, last_activity_ms_)` 起 5 分钟（复用既有 `IDLE_TIMEOUT_MS`/"5 分钟无活动"概念），超时自动隐藏，任何用户活动重新计时显示。**复用 `last_activity_ms_` 作为交互锚点，不新增交互概念**。
+  2. `data_update_task.cc`：删除旧的 sensor_label_ 反色告警（`low_battery_alert_active` 及温湿度覆盖保护逻辑），改为每周期调用 `UpdateLowBatteryAlertInternal()`。
+  3. 交互接入：硬件按钮（BOOT/USER/双击/长按，本就已调 `NotifyUserActivity`，零改动）；`AdminServer::IsAuthorized` 成功且 `csrf=true`（=浏览器写操作，区别于自动轮询 GET 与 Bearer 自动化）时调 `NotifyUserActivity()`（只写时间戳，无 LVGL 调用，HTTP 线程安全）。
+  4. 后台：`/api/device` 新增 `battery_low`（处于低电量区间）与 `low_battery_alert`（提示当前可见）；tab 栏下方新增全局红字横幅 `#lowBattBanner`（随 `status()` 5 秒轮询自动显隐）。
+  5. 契约测试新增 `test_global_low_battery_alert_contract`（49/49 通过）。
+- **修改原因**：用户需求——电量低于 20% 时所有页面+后台都有提示；无人操作只显示 5 分钟；隐藏后人工操作（后台界面/硬件按钮）再次提示。旧实现只有综合页 sensor_label_ 反色，其他页面无提示。
+- **影响范围**：低电量提示从"综合页常驻反色"变为"全局悬浮条限时提示"；提示音保留（仅首次触发）；温湿度行不再被借用。无 NVS/配置变化。
+- **测试结果**：
+  - idf.py build: ✅（测试阈值版 + 生产版各一次）
+  - 契约测试: ✅ 49/49；JS 语法检查: ✅
+  - 真机验证（临时阈值 99/101 全链路）：①触发显示：综合页/日历页截图均见底部悬浮条"电量低 95% · 请尽快充电"；②后台横幅 playwright 可见；③5 分钟无交互自动隐藏（日志 `10:12:56 低电量提示隐藏` + API `low_battery_alert:false`）；④后台写操作交互重现（日志 `10:14:07 低电量提示显示` + API `true`）；⑤恢复阈值 20/25 后 94% 电量不误报（API 双 false + 截图无悬浮条）
+  - 注意：验证期间发现 AI 唤醒词触发也会刷新用户活动（`data_update_task.cc:533` 既有定义，人声=人为操作），属预期语义；用省电模式关闭 AFE 后完成了确定性隐藏验证
+  - app 分区使用率: 95%（无显著变化）
+- **回滚方式**：git revert 对应 commit
+- **关联文档**：`PROJECT_CONTEXT.md` §5.5（/api/device 字段）
+
+---
+
 ## 2026-08-17 — 修复省电模式两处失效/反效问题 + 日志模块下拉按功能分组
 
 - **修改内容**：

@@ -33,6 +33,16 @@
 #include "managers/quota_manager.h"
 #include "managers/todo_manager.h"
 #include "managers/weather_manager.h"
+#include "assets/lang_config.h"
+
+LV_FONT_DECLARE(font_puhui_16_4);
+
+namespace {
+// 低电量提示触发阈值（%）。验证时可临时改大（如 99）做全链路测试，验证后必须改回 20。
+constexpr int kLowBattThresholdPct = 20;
+// 恢复阈值：≥25%（或充电）消失并复位，避免 19/20% 抖动反复闪烁
+constexpr int kLowBattRecoverPct = 25;
+}  // namespace
 
 static const char *TAG = "CustomDisplay";
 
@@ -621,5 +631,76 @@ void CustomLcdDisplay::NotifyUserActivity() {
     if (power_saving_) {
         power_saving_ = false;
         ESP_LOGI(TAG, "用户活动检测到，退出省电模式");
+    }
+}
+
+// ===== 全局低电量提示 =====
+
+void CustomLcdDisplay::SetupLowBatteryOverlay() {
+    // lv_layer_top 位于所有页面对象之上，页面切换/隐藏均不影响悬浮条
+    low_batt_overlay_ = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(low_batt_overlay_, 400, 22);
+    lv_obj_set_pos(low_batt_overlay_, 0, 278);
+    lv_obj_set_style_bg_color(low_batt_overlay_, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(low_batt_overlay_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(low_batt_overlay_, 1, 0);
+    lv_obj_set_style_border_color(low_batt_overlay_, lv_color_black(), 0);
+    lv_obj_set_style_radius(low_batt_overlay_, 0, 0);
+    lv_obj_set_style_pad_all(low_batt_overlay_, 0, 0);
+    lv_obj_remove_flag(low_batt_overlay_, LV_OBJ_FLAG_SCROLLABLE);
+
+    low_batt_overlay_label_ = lv_label_create(low_batt_overlay_);
+    // 不用 ⚠ emoji——子集字体没有该字形会静默吞掉（见 reference-lvgl9-page-patterns）
+    lv_obj_set_style_text_font(low_batt_overlay_label_, &font_puhui_16_4, 0);
+    lv_obj_set_style_text_color(low_batt_overlay_label_, lv_color_black(), 0);
+    lv_label_set_text(low_batt_overlay_label_, "电量低 · 请尽快充电");
+    lv_obj_center(low_batt_overlay_label_);
+
+    lv_obj_add_flag(low_batt_overlay_, LV_OBJ_FLAG_HIDDEN);
+}
+
+void CustomLcdDisplay::UpdateLowBatteryAlertInternal(int level, bool charging, bool discharging) {
+    if (!low_batt_overlay_ || level < 0) return;
+    const uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    const bool eligible = (!charging && discharging && level < kLowBattThresholdPct);
+    const bool exit = (charging || !discharging || level >= kLowBattRecoverPct);
+
+    if (eligible && !low_batt_eligible_) {
+        // 新进入低电量：触发显示 + 播一次提示音（对齐原版行为；后续重现不再播）
+        low_batt_trigger_ms_ = now_ms;
+        Application::GetInstance().PlaySound(Lang::Sounds::OGG_LOW_BATTERY);
+        ESP_LOGW(TAG, "电量低 %d%%：全局提示已触发", level);
+    }
+    if (exit) {
+        if (low_batt_eligible_ || low_batt_alert_visible_) {
+            ESP_LOGI(TAG, "电量恢复（%d%%）或开始充电：低电量提示复位", level);
+        }
+        low_batt_eligible_ = false;
+        low_batt_trigger_ms_ = 0;
+    } else if (eligible) {
+        low_batt_eligible_ = true;
+    }
+
+    // 可见窗口 = max(触发时刻, 最近用户活动) 起 5 分钟（与 IDLE_TIMEOUT_MS 同一概念）；
+    // 隐藏期间任何用户活动（按钮/AI 对话/后台写操作，均走 NotifyUserActivity）会重新计时显示。
+    const uint32_t window_start = low_batt_trigger_ms_ > last_activity_ms_
+        ? low_batt_trigger_ms_ : last_activity_ms_;
+    const bool visible = low_batt_eligible_ && window_start > 0 &&
+                         now_ms >= window_start && (now_ms - window_start) < IDLE_TIMEOUT_MS;
+    if (visible != low_batt_alert_visible_) {
+        low_batt_alert_visible_ = visible;
+        if (visible) {
+            ESP_LOGI(TAG, "低电量提示显示（%d%%）", level);
+        } else {
+            ESP_LOGI(TAG, "低电量提示隐藏（5 分钟无交互）");
+        }
+    }
+    if (visible) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "电量低 %d%% · 请尽快充电", level);
+        lv_label_set_text(low_batt_overlay_label_, buf);
+        lv_obj_remove_flag(low_batt_overlay_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(low_batt_overlay_, LV_OBJ_FLAG_HIDDEN);
     }
 }

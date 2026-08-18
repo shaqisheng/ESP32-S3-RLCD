@@ -24,6 +24,7 @@ LV_IMAGE_DECLARE(ui_img_weather_unknown_large);
 namespace {
 constexpr int kTopHeight = 184;
 constexpr int kAssistantWidth = 240;
+constexpr int kEmotionWidth = 76;
 const char* TAG = "WeatherUI";
 
 void MakePlainPanel(lv_obj_t* object, lv_color_t color) {
@@ -139,6 +140,12 @@ void CustomLcdDisplay::SetupWeatherUI() {
     lv_obj_set_style_text_align(emotion_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(emotion_label_, "待命");
 
+    // 表情区与小智文本区之间的分割竖线（533c44a 误删后按用户反馈恢复）
+    lv_obj_t* assistant_divider = lv_obj_create(chat_card_);
+    lv_obj_set_pos(assistant_divider, kEmotionWidth, 10);
+    lv_obj_set_size(assistant_divider, 1, 96);
+    MakePlainPanel(assistant_divider, lv_color_black());
+
     chat_status_label_ = lv_label_create(chat_card_);
     lv_obj_set_width(chat_status_label_, 146);
     lv_obj_set_style_text_font(chat_status_label_, &font_puhui_16_4, 0);
@@ -187,6 +194,9 @@ void CustomLcdDisplay::SetupWeatherUI() {
     emoji_image_ = lv_img_create(weather_page_);
     lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
     chat_message_label_ = chat_status_label_;
+
+    // 全局低电量悬浮条（lv_layer_top，所有页面共享）
+    SetupLowBatteryOverlay();
 
     ESP_LOGI(TAG, "编辑式主页 UI 创建完成");
 }

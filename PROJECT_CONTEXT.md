@@ -227,7 +227,7 @@ GET/PUT /api/quota-display    AI 页显示配置（每屏卡数/翻页/固定页
 GET/PUT /api/weather          高德城市与 Key 配置（amap_key 不回显）
 GET/PUT /api/calendar         节假日源
 GET/PUT /api/api-token        读取/写入 token
-GET/PUT /api/device           设备信息 / 音量
+GET/PUT /api/device           设备信息 / 音量（含 battery_low / low_battery_alert 全局低电量提示状态）
 POST   /api/display/switch    立即切换显示页面
 GET    /api/display/screenshot 屏幕截图
 GET    /api/logs?after&limit  系统日志（PSRAM 环形缓冲 256 条，增量拉取，敏感参数已打码）
