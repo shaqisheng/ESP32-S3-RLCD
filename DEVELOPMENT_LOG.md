@@ -25,6 +25,19 @@
 
 ---
 
+## 2026-08-18 — README 增加界面实拍截图（设备 5 页 + 后台 2 张）
+
+- **修改内容**：
+  - `docs/screenshots/`：新增 7 张实拍截图——设备 5 页（`page-overview/calendar/forecast/quota/todo.png`，经 `/api/display/screenshot` 实采）+ 后台 2 张（`admin-overview/admin-quota.png`，playwright 实采）
+  - `README.md`：新增「界面预览」章节（设备屏幕 5 图 + 后台 2 图，表格排版，附截图来源说明）
+- **修改原因**：用户要求完善 README 并增加截图。拍摄过程：待低电量悬浮条 5 分钟无交互自动隐藏后，切页写操作与截图 GET 连续快速执行（切页会触发悬浮条交互重现，需在其重渲染前完成截图）；3 条示例待办（提交周报/买牛奶/给绿植浇水）拍摄后已删除；设备显示页已恢复为 AI 页。
+- **影响范围**：仅文档与静态资源，无代码改动。
+- **测试结果**：7 张截图逐张人工核验——页面内容正确、无低电量悬浮条、无敏感信息（仅账号昵称）；`git diff --check` ✅
+- **回滚方式**：`git revert` 删除截图与章节即可
+- **关联文档**：README.md「界面预览」
+
+---
+
 ## 2026-08-18 — 全局低电量提示（所有页面悬浮条 + 后台横幅 + 5 分钟无交互自动隐藏 + 交互重现）
 
 - **修改内容**：
@@ -86,6 +99,72 @@
   - app 分区使用率: 95%（无显著变化）
 - **回滚方式**：git revert 对应 commit
 - **关联文档**：`PROJECT_CONTEXT.md` §5.5（/api/logs）；`ARCHITECTURE.md` §6.2；设计稿 `docs/mockups/admin-logs-v1.html`
+
+---
+
+## 2026-08-17 — 恢复综合页小智区左分割竖线（533c44a 误删）
+
+- **修改内容**：`weather_ui.cc` 恢复 `kEmotionWidth`(76) 常量与 `assistant_divider`
+  （chat_card_ 内 x=76、y=10、1×96 黑色竖线），+7 行。
+- **修改原因**：用户反馈综合页下方三块布局的左边分割竖线消失。定位为 533c44a
+  （精简概览页 LVGL 对象）把 `assistant_divider` 当"装饰对象"删除——该线是表情区（0-76px)
+  与小智文本区（84px 起）的视觉分界，非纯装饰。同次删除的 `todo_rule`（待办标题下横线）
+  用户未提及，暂不恢复。
+- **影响范围**：综合页下方恢复 表情 | 小智 | 待办 三分块视觉。
+- **测试结果**：
+  - 契约测试： ✅ 46/46（无此对象断言，无需改动）
+  - `git diff --check`: ✅
+  - idf.py build: ✅（app 分区余量 5%，0x38e20）
+  - 真机验证: ✅ 串口 70 秒无异常，minimal SRAM 58.6KB；截图确认 x=76 竖线恢复，
+    下方恢复 表情 | 小智 | 待办 三分块（同屏可见和风实时数据也在正常刷新：晴 30° 东东北风2级）
+- **回滚方式**：`git revert` 本次提交
+- **关联文档**：无
+
+---
+
+## 2026-08-17 — 天气源整体切换为和风天气新版 API（实时 + 七日单源）
+
+- **修改内容**：
+  - `managers/weather_manager.{h,cc}`：高德（实时）+ Open-Meteo（七日）双源 → 和风新版 v1 单源。
+    请求改为 `GET https://{qw_host}/weather/v1/current/{lat:.2f}/{lon:.2f}` 与
+    `.../daily/{lat}/{lon}?days=7&localTime=true`，认证走 `X-QW-Api-Key` 请求头（不进 URL/日志）。
+    配置项 `amap_adcode`/`amap_key` → `qw_host`/`qw_key`；构造时一次性 `EraseKey` 清理 NVS 遗留高德配置。
+    解析适配新结构：`condition{text,code}`、`temperature{value,unit}`、湿度 [0,1]×100、
+    `wind.direction.compass` 英文方位码→中文；实时接口无时间字段，"上次更新"用本地请求时刻；
+    七日日期取 `forecastStartTime` 前 10 字符。响应缓冲 8KB→12KB（PSRAM）。
+    失败语义：实时成功但七日失败 → 保留旧预报快照报失败重试，不再降级三日。
+  - `forecast_ui.cc`：`WeatherIcon()` 数字分支 WMO 码 → 和风码
+    （100 晴 / 101-103 多云 / 104 阴 / 302-304 雷 / 300-399 雨 / 400-499 雪 / 500-515 雾霾沙尘），
+    中文关键字兜底不变，MCP 外部写入路径不受影响。
+  - `managers/admin_server.cc`：后台"城市天气"面板高德 Key 单字段 → 和风 API Host + API Key 双字段
+    （Host 明文回显、Key 只写不读）；`saveWeather`/`loadExtras` 同步；城市目录 lat/lon 复用，adcode 不再使用。
+  - `waveshare-s3-rlcd-4.2.cc` 注释、契约测试 4 项重写（46/46 通过）。
+- **修改原因**：高德免费版预报只有 3 天、Open-Meteo 为境外服务；目标单源国产化。
+  和风新版每月 5 万次免费、文档齐全。注意旧公共域名 devapi/api.qweather.com 2026 年起已 403，
+  必须用控制台分配的个人 API Host。
+- **影响范围**：`/api/weather` 契约变化（`has_amap_key`→`has_qw_key`、新增 `qw_host` 回显）；
+  **升级后需在后台重新配置和风 API Host + Key 否则天气不更新**；设备屏 UI 结构与字段格式不变。
+- **测试结果**：
+  - 契约测试： ✅ 46/46（4 项天气断言重写 + gzip 解压防回归断言）
+  - 官方示例 JSON 字段路径校验（Python 模拟 cJSON 遍历）: ✅ current/daily 全部字段可取
+  - 图标代码区间 vs 官方 weather-conditions.csv(55 个代码）: ✅ 仅 900/901/999 落 Unknown（预期）
+  - `git diff --check`: ✅；新增长行已全部收至 100 列内
+  - clang-format: ⚠️ 未整文件执行——HEAD 文件本身不符合任何 clang-format 19-22 版本的输出
+    （`.clang-format` 含 19+ 专属键 `ExceptShortType`），整文件格式化会产生数百行无关 diff，
+    违反 §10.3；本次改为手写贴合现有风格。如需统一格式化应另开 chore 提交。
+  - idf.py build: ✅（app 分区余量 5%，0x38e80）
+  - 真机验证: ✅ 烧录后串口 75 秒无异常（stack overflow/abort/NO_MEM/SPI 均无），
+    minimal SRAM 58.9KB；POST /api/weather/refresh 触发后诊断返回
+    "和风实时天气与七日预报更新成功"；七日页截图确认 7 天数据/图标/中文风向全部正确
+  - **真机抓出两个文档之外的问题**：
+    1. 和风网关**强制 gzip**（实测无视 `Accept-Encoding: identity`，连 401 错误页都 gzip），
+       首版固件全部解析失败。修复：手工解析 gzip 头 + ROM `tinfl` 裸 deflate 解压到 16KB PSRAM 缓冲。
+    2. 直接调 `tinfl_decompress_mem_to_mem` 导致 **activation 任务栈溢出重启循环**
+       （该帮助函数把 ~3.3KB 的 `tinfl_decompressor` 状态结构放任务栈）。
+       修复：改用低层 `tinfl_decompress` + 状态结构一次性分配 PSRAM（构造函数随缓冲区一起）。
+    两个修复均已烧录验证；契约测试已加 gzip 断言防回归。
+- **回滚方式**：`git revert` 本次提交；NVS 中被 EraseKey 的高德配置需重新在后台填写
+- **关联文档**：ARCHITECTURE.md（架构图/目录/NVS 表三处）、PROJECT_CONTEXT.md（§5.2 模块表、§5.5 API 表、§6 功能列表）
 
 ---
 
