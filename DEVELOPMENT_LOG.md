@@ -6,6 +6,76 @@
 
 ---
 
+## 2026-08-21 — 修复 AI 页"正在刷新…"永久卡住（refreshing_/revision_ 竞态）
+
+- **修改内容**：
+  - `quota_manager.cc` `RefreshAll()`：把 `refreshing_ = false` 移到 `revision_++` **之前**（原来在 NVS 持久化之后）。
+  - `data_update_task.cc`：每秒 AI 页检查处记录 `quota_was_refreshing`，`refreshing` 由 true→false 的跳变沿也触发一次 `RenderQuotaPageInternal()`（防御性自愈）。
+- **修改原因**：原顺序下 data_update_task 每秒检查可在"revision 已 bump 但 refreshing 尚未清"的窗口内以"刷新中"重绘并把新 revision 标记为已渲染；refreshing 清除后 TickQuotaPage 见 revision 无变化不再重绘，"正在刷新…"永久留在屏上（2026-08-18 实机复现）。
+- **影响范围**：仅 AI 页刷新状态显示；额度数据本身、NVS、API 不受影响。
+- **测试结果**：
+  - idf.py build / 烧录: ✅（随 2026-08-21 后台截图批次一起上机）
+  - 串口 70s: ✅ 无异常；AI 页截图多次未再出现卡住的"正在刷新…"（跳变沿自愈生效）
+- **回滚方式**：`git revert`（注意两文件需一起回滚，顺序与跳变沿互为双保险）
+- **关联文档**：无
+
+---
+
+## 2026-08-21 — 后台截图：下载文件名带页面名+日期；修复复制按钮贴不出图片
+
+- **修改内容**：
+  - `admin_server.cc` C++：`DeviceHandler` GET 新增 `current_page` 字段（overview/calendar/forecast/quota/todo/info，读 `CustomLcdDisplay::Is*Mode()`——硬件按键切页后文件名仍准确）。
+  - `admin_server.cc` JS：
+    - `takeScreenshot` 成功后设 `screenshotLink.download = 页面名_YYYY_MM_DD.png`（如 `AI_2026_08_21.png`；页面名中文化用 names 映射，info 页补入映射）；失败保持默认 screenshot.png。
+    - `copyScreenshot` 重写：①原生 PNG 路径加 `window.isSecureContext` 门控；②局域网降级路径在 text/html 之外新增 **text/rtf**（`{\pngblip` 内嵌 PNG 十六进制，picw/pich + width/height twips 双份尺寸）——TextEdit/Word/WPS 等贴出真图片；③toast/提示文案改为如实说明能力边界（右键拷贝图片 / localhost 代理）。
+    - 截图面板 hint 同步更新（文件名规则 + 复制能力说明）。
+  - `tests/host/rlcd_ui_source_contract_test.py`：`test_screenshot_copy_button_with_fallback` 扩展 5 项断言（text/rtf、\pngblip、isSecureContext、download 命名、C++ current_page）。
+- **修改原因**：①用户要求下载文件名改为页面名+时间；②复制按钮在局域网 IP 访问下"已复制"但目标应用贴不出图片——根因是 HTTP 非安全上下文里浏览器平台级禁止 `navigator.clipboard.write`，旧降级只写 text/html，纯 HTML/文本粘贴目标拿不到图像。RTF 是该场景下浏览器允许写入的唯一"图像"载体。
+- **影响范围**：仅后台截图面板行为；`/api/device` 响应新增只读字段（向后兼容）。经 localhost 代理（scripts/admin-local-proxy.py）访问时复制为原生 PNG，行为不变且更稳。
+- **测试结果**：
+  - 契约测试: ✅ 51/51（扩展 1 项）
+  - node --check 抽取 JS: ✅
+  - RTF 构造算法 Python 等价实现验证: ✅
+  - `git diff --check`: ✅
+  - idf.py build: ✅（app 分区余量 4%，0x33f90）
+  - 真机烧录 + 串口 70s: ✅ 无 abort/reboot/NO_MEM；minimal sram 54019
+  - 浏览器端到端（playwright，设备 192.168.20.204）: ✅ 截图后 download 属性=AI_2026_08_21.png（设备因固定页码配置自动回 AI 页，名字与真实页一致）；current_page 随 API 切页实时更新；复制降级路径 stub 实测写入三种 flavor：text/html 20560B + **text/rtf 30794B（≈2×PNG，内嵌成功）** + text/plain 48B；确认 isSecureContext=false/clipboard undefined（根因坐实）
+- **回滚方式**：`git revert`
+- **关联文档**：面板内 hint 即用户文档
+
+---
+
+## 2026-08-21 — AI 卡片重置时间格式再调整（日时分 → 日 HH:MM）
+
+- **修改内容**：`quota_ui.cc` `FormatResetAbsolute()`——同月 `"%d日%d时%d分"` → `"%d日 %02d:%02d"`（如 `15日 15:30`），跨月 `"%d月%d日 %02d:%02d"`（如 `9月2日 15:30`）；render 处注释同步。
+- **修改原因**：用户要求把"XX日XX时XX分"改为更紧凑的"XX日 XX:XX"。
+- **影响范围**：仅 AI 页卡片进度条下方的重置绝对时间显示；最长文本 16 字节 < 32 缓冲。
+- **测试结果**：
+  - 契约测试: ✅ 51/51
+  - `git diff --check`: ✅
+  - idf.py build: ✅；真机烧录 + 串口 70s ✅ 无异常
+  - 屏幕截图核验: ✅ 4 张卡片均为"X日 HH:MM"格式（如 4% 23日 08:46 1d17h），补零正确
+- **回滚方式**：`git revert`
+- **关联文档**：无
+
+---
+
+## 2026-08-21 — AI 卡片重置时间格式增加"分"（日时 → 日时分）
+
+- **修改内容**：`quota_ui.cc` `FormatResetAbsolute()`——同月格式 `"%d日%d时"` → `"%d日%d时%d分"`，跨月 `"%d月%d日%d时"` → `"%d月%d日%d时%d分"`；render 处注释同步（日时→日时分）。
+- **修改原因**：用户要求进度条下方重置时间从"XX日XX时"精确到"XX日XX时XX分"。
+- **影响范围**：仅 AI 页卡片进度条下方的重置绝对时间显示；倒计时、5H label 的 HH:mm 格式、其他页面不受影响。最长文本"12月31日23时59分"=20 bytes，32 字节缓冲充足；下方整行组合仍受既有 LONG_DOT 宽度裁剪保护。
+- **测试结果**：
+  - 契约测试: ✅ 50/50（无需改断言——现有断言只查函数名与倒计时格式）
+  - `git diff --check`: ✅
+  - idf.py build: ✅（app 分区余量 4%，0x345f0）
+  - 真机烧录 + 串口 70s: ✅ 无 abort/reboot/NO_MEM；minimal sram 60263
+  - 屏幕截图核验: ✅ 4 张卡片进度条下方均为"XX日XX时XX分"格式（如 `4% 23日8时46分 1d17h`），无截断
+- **回滚方式**：`git revert` 本次提交
+- **关联文档**：无
+
+---
+
 ## 2026-08-18 — 后台截图面板新增「复制」按钮（现代 API + copy 事件劫持降级）
 
 - **修改内容**：`admin_server.cc` 屏幕截图面板下载按钮旁新增「复制」按钮（截图成功后与下载一起出现）。复制实现两层：①`navigator.clipboard.write(ClipboardItem)`（现代 API，仅 HTTPS/localhost 可用）；②HTTP 局域网降级——**copy 事件劫持**：`document.addEventListener('copy')` 里 `clipboardData.setData('text/html', '<img src="data:image/png;base64,...">')` + `setData('text/plain', 提示语)` + `preventDefault()`，然后 `execCommand('copy')` 触发。预览图 `<img>` 同步改为 data URL（`readAsDataURL`）承载图像数据。
