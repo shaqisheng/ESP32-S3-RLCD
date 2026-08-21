@@ -61,7 +61,7 @@ void FormatResetCountdown(int64_t reset_at, char* out, size_t size) {
     }
 }
 
-// 重置绝对时间："15日15时"（同月内）或 "9月2日15时"（跨月）。
+// 重置绝对时间："15日 15:30"（同月内）或 "9月2日 15:30"（跨月）。
 void FormatResetAbsolute(int64_t reset_at, char* out, size_t size) {
     if (reset_at <= 0) {
         out[0] = '\0';
@@ -74,9 +74,10 @@ void FormatResetAbsolute(int64_t reset_at, char* out, size_t size) {
     struct tm now_info;
     localtime_r(&now_t, &now_info);
     if (info.tm_mon == now_info.tm_mon) {
-        snprintf(out, size, "%d日%d时", info.tm_mday, info.tm_hour);
+        snprintf(out, size, "%d日 %02d:%02d", info.tm_mday, info.tm_hour, info.tm_min);
     } else {
-        snprintf(out, size, "%d月%d日%d时", info.tm_mon + 1, info.tm_mday, info.tm_hour);
+        snprintf(out, size, "%d月%d日 %02d:%02d", info.tm_mon + 1, info.tm_mday, info.tm_hour,
+                 info.tm_min);
     }
 }
 
@@ -427,7 +428,7 @@ void CustomLcdDisplay::RenderQuotaPageInternal() {
             lv_obj_add_flag(quota_bars_[slot][0], LV_OBJ_FLAG_HIDDEN);
         }
 
-        // 进度条下方：周额度剩余% + 重置时间(日时) + 倒计时。
+        // 进度条下方：周额度剩余% + 重置时间(日 HH:MM) + 倒计时。
         // 紧凑格式（去掉 "周" 前缀和 "·" 分隔，节省宽度避免被 LONG_DOT 截断）：
         // 上方进度条已表明是周额度，前缀冗余；分隔用空格更紧凑。
         char when[32], countdown[32];
