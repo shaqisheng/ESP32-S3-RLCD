@@ -162,7 +162,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <div class="toolbar" style="margin:8px 0;justify-content:flex-start"><button onclick="wifiApStart(this)">启用 AP 热点</button><button onclick="wifiApStop()">停止 AP 热点</button></div>
 <div id="wifiApInfo" class="hint" style="display:none"></div>
 </section>
-<section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。点击截取后会替换预览，右键另存为即可下载。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a><button id="screenshotCopyBtn" style="display:none" onclick="copyScreenshot()">复制</button></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
+<section class="panel"><h2>屏幕截图</h2><p class="hint">抓取设备当前显示的实时画面（1-bit 黑白 PNG，400×300）。下载文件名自动为「页面名_日期.png」（如 AI_2026_08_21.png）。注：经局域网 IP 访问时浏览器禁止网页写原生图片剪贴板，「复制」写入的是富文本图片（TextEdit/Word/飞书文档等可贴出图片）；需要原生图片复制请右键预览图→拷贝图片，或经 localhost 代理访问（scripts/admin-local-proxy.py）。</p><div class="toolbar" style="margin-bottom:14px;justify-content:flex-start"><button class="primary" onclick="takeScreenshot(this)">截取屏幕</button><a id="screenshotLink" download="screenshot.png" style="display:none"><button>下载</button></a><button id="screenshotCopyBtn" style="display:none" onclick="copyScreenshot()">复制</button></div><div id="screenshotBox" style="border:2px solid var(--line);background:#fff;display:none;padding:8px;text-align:center"><img id="screenshotImg" style="max-width:100%;height:auto;image-rendering:pixelated" alt="截图预览"></div></section>
 <section class="panel"><h2>待办 API</h2><p class="hint">局域网客户端使用 Authorization: Bearer &lt;token&gt;，支持 GET/POST /api/todos 与 GET/PUT/DELETE /api/todos/{id}。</p><div id="apiToken" class="api-token">读取中…</div><div class="toolbar" style="margin-top:14px;justify-content:flex-start"><button class="danger" onclick="regenToken()">重新生成 Token</button></div></section>
 </div>
 <div class="tab-pane" data-pane="logs">
@@ -184,7 +184,7 @@ button.loading{pointer-events:none;background:var(--muted)!important;color:var(-
 <div id="toast" class="toast hidden"></div>
 <script>
 var csrf="",items=[],pages=[],todos=[],lastSuccess=0,setupMode=false,editingKey="",uiSeq=0,dirty=false,lastAudibleVolume=50,todoFilter="all";
-var names={overview:"综合",calendar:"日历",forecast:"天气",quota:"AI",todo:"待办"};
+var names={overview:"综合",calendar:"日历",forecast:"天气",quota:"AI",todo:"待办",info:"信息"};
 var providerNames={codex:"Codex",kimi:"Kimi","glm-cn":"GLM 国内","glm-global":"GLM 国际",deepseek:"DeepSeek","generic-json":"通用 JSON",manual:"手动额度"};
 var stateNames={ok:"正常",error:"失败",stale:"旧数据",pending:"等待刷新",disabled:"已停用"};
 var cityCatalog={
@@ -270,6 +270,9 @@ async function savePowerSave(){try{await api("/api/power-save",{method:"PUT",bod
 var lastShotBlob=null,lastShotDataUrl=null;
 async function takeScreenshot(btn){var orig=btn.textContent;btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';try{var r=await fetch("/api/display/screenshot",{credentials:"same-origin"});if(!r.ok){var t=await r.text();throw Error(t||"HTTP "+r.status)}var blob=await r.blob();lastShotBlob=blob;
 el("screenshotLink").href=URL.createObjectURL(blob);
+// 下载文件名：页面名_YYYY_MM_DD.png（如 AI_2026_08_21.png）。页面名取设备当前
+// 显示页（/api/device 的 current_page，硬件按键切页也会同步），失败保持默认名。
+try{var dv=await api("/api/device");var pn=names[dv.current_page]||dv.current_page||"screen";var t2=new Date(),p2=function(x){return(x<10?"0":"")+x};el("screenshotLink").download=pn+"_"+t2.getFullYear()+"_"+p2(t2.getMonth()+1)+"_"+p2(t2.getDate())+".png"}catch(e){}
 // 预览图必须用 data URL（base64 内嵌 PNG 数据）而不是 blob: 引用——
 // execCommand 复制的是 <img> 的 HTML，blob: URL 离开本页即失效，
 // 粘贴目标只能拿到 alt 文字；data URL 让复制的 HTML 自带完整图像。
@@ -277,20 +280,25 @@ var dataUrl=await new Promise(function(res,rej){var fr=new FileReader();fr.onloa
 el("screenshotImg").src=dataUrl;lastShotDataUrl=dataUrl;
 el("screenshotBox").style.display="block";el("screenshotLink").style.display="inline-block";el("screenshotCopyBtn").style.display="inline-block";btn.classList.add("success");btn.textContent="✓";toast("截图成功，"+(blob.size/1024).toFixed(1)+" KB");setTimeout(function(){btn.classList.remove("success");btn.textContent=orig;btn.disabled=false},1200)}catch(e){btn.textContent=orig;btn.disabled=false;toast("截图失败："+e.message,true)}}
 async function copyScreenshot(){var img=el("screenshotImg");if(!img.src||!lastShotBlob){toast("请先截取屏幕",true);return}
-if(navigator.clipboard&&window.ClipboardItem){try{await navigator.clipboard.write([new ClipboardItem({"image/png":lastShotBlob})]);toast("已复制到剪贴板");return}catch(e){}}
-// HTTP 局域网降级：copy 事件劫持（非安全上下文也可写剪贴板）。
-// 选中 <img> + execCommand 的路线已在实机上证明不可靠——部分浏览器/粘贴目标
-// 只拿到 text/plain（即 alt 文字"截图预览"）。改为在 copy 事件里直接覆写：
-// text/html = 内嵌完整 base64 PNG 的 <img>（微信/飞书/备忘录等富应用粘贴出图片），
-// text/plain = 明确提示（纯文本目标不再看到莫名其妙的 alt 文字）。
+// ① 安全上下文（localhost 代理 / HTTPS）：写入原生 PNG，任何应用都能粘贴出图片。
+if(window.isSecureContext&&navigator.clipboard&&window.ClipboardItem){try{await navigator.clipboard.write([new ClipboardItem({"image/png":lastShotBlob})]);toast("已复制图片到剪贴板");return}catch(e){}}
+// ② 局域网 IP = 非安全上下文：浏览器平台级禁止网页写原生图片剪贴板（任何 JS
+//    都绕不过），这正是此前「复制了但贴不出图片」的根因。降级为 copy 事件劫持，
+//    同时写三种 flavor 提高粘贴成功率：
+//    text/html = 内嵌 base64 PNG 的 <img>（浏览器/富文本应用贴出图片）；
+//    text/rtf  = {\pngblip 内嵌 PNG 十六进制}（TextEdit/Word/WPS 贴出图片）；
+//    text/plain = 明确提示（纯文本目标不再看到莫名其妙的 alt 文字）。
+//    微信等只认原生图片的剪贴板仍贴不出——用右键图片→拷贝图片或 localhost 代理。
 var html='<img src="'+lastShotDataUrl+'" style="image-rendering:pixelated">';
-var hint="设备屏幕截图（如未显示图片，请用「下载」或右键图片→复制图片）";
+var rtf="";
+try{var bin=atob((lastShotDataUrl||"").split(",")[1]||""),hx=[];for(var i=0;i<bin.length;i++)hx.push(("0"+bin.charCodeAt(i).toString(16)).slice(-2));rtf="{\\rtf1\\pict\\pngblip\\picw400\\pich300\\width6000\\height4500 "+hx.join("")+"}"}catch(e){}
+var hint="设备屏幕截图（如未贴出图片：右键预览图→拷贝图片，或经 localhost 代理访问后台后复制）";
 var fired=false;
-function onCopy(e){e.clipboardData.setData("text/html",html);e.clipboardData.setData("text/plain",hint);e.preventDefault();fired=true}
+function onCopy(e){e.clipboardData.setData("text/html",html);if(rtf){try{e.clipboardData.setData("text/rtf",rtf)}catch(e2){}}e.clipboardData.setData("text/plain",hint);e.preventDefault();fired=true}
 document.addEventListener("copy",onCopy,{once:true});
 var ok=false;try{ok=document.execCommand("copy")}catch(e){}
 document.removeEventListener("copy",onCopy);
-if(ok&&fired)toast("已复制到剪贴板");else toast("复制失败：浏览器不支持（可右键图片复制或用下载）",true)}
+if(ok&&fired)toast("已复制（富文本图片；部分应用只认原生图片，可右键预览图→拷贝图片）");else toast("复制失败：可右键预览图→拷贝图片，或用「下载」",true)}
 function renderDisplaySwitches(){var sorted=pages.slice().sort(function(a,b){return a.order-b.order});var h="";sorted.forEach(function(p){if(p.enabled)h+='<button onclick="switchPage(\''+p.id+'\')">'+(names[p.id]||p.id)+'</button>'});h+='<button onclick="switchPage(\'toggle\')">下一页</button>';el("displaySwitches").innerHTML=h}
 async function saveQuotaRefreshInterval(){var minutes=Number(el("quotaRefreshMinutes").value);if(!Number.isInteger(minutes)||minutes<1||minutes>60){toast("请输入 1–60 分钟",true);return}await api("/api/refresh-interval",{method:"PUT",body:JSON.stringify({minutes:minutes})});toast("AI 刷新间隔已设置为 "+minutes+" 分钟")}
 async function saveQuotaDisplay(){var cards=Number(el("quotaCardsPerPage").value),adv=Number(el("quotaAutoAdvance").value),fp=Number(el("quotaForcePage").value);if(!Number.isInteger(cards)||cards<1||cards>4){toast("每屏卡片数必须为 1-4",true);return}if(!Number.isInteger(adv)||adv<0||adv>120){toast("自动翻页间隔必须为 0-120 秒",true);return}try{await api("/api/quota-display",{method:"PUT",body:JSON.stringify({cards_per_page:cards,auto_advance_seconds:adv,force_page:fp})});toast("AI 页显示配置已保存")}catch(e){toast(e.message,true)}}
@@ -1087,6 +1095,23 @@ esp_err_t AdminServer::DeviceHandler(httpd_req_t* req) {
     if (auto* display = static_cast<CustomLcdDisplay*>(Board::GetInstance().GetDisplay())) {
         cJSON_AddBoolToObject(root, "battery_low", display->IsLowBatteryEligible());
         cJSON_AddBoolToObject(root, "low_battery_alert", display->IsLowBatteryAlertVisible());
+        // 当前显示页 id（后台截图下载文件名用：页面名_YYYY_MM_DD.png）。
+        // 硬件按键切页后这里也能同步到真实页面。
+        const char* page_id = "unknown";
+        if (display->IsOverviewMode()) {
+            page_id = "overview";
+        } else if (display->IsCalendarMode()) {
+            page_id = "calendar";
+        } else if (display->IsForecastMode()) {
+            page_id = "forecast";
+        } else if (display->IsQuotaMode()) {
+            page_id = "quota";
+        } else if (display->IsTodoMode()) {
+            page_id = "todo";
+        } else if (display->IsInfoMode()) {
+            page_id = "info";
+        }
+        cJSON_AddStringToObject(root, "current_page", page_id);
     }
     // 温湿度：SHTC3 I2C 读取（~10ms）。
     auto sensor = SensorManager::getInstance().getTempHumidity();

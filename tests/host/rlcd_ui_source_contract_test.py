@@ -553,11 +553,31 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         # 算法注释存在以便后续维护者理解为什么不用 timegm
         self.assertIn("Howard Hinnant", quota)
 
+    def test_quota_refresh_clears_refreshing_before_bumping_revision(self):
+        """刷新完成顺序契约（2026-08-18 实机竞态回归）：
+        refreshing_=false 必须先于 revision_++——否则每秒检查会以"刷新中"
+        重绘并把新 revision 标记为已渲染，之后 TickQuotaPage 认为无变化不再
+        重绘，"正在刷新…"永久卡在 AI 页头部。data_update_task 必须有
+        true→false 跳变补绘兜底。"""
+        quota = (BOARD / "managers/quota_manager.cc").read_text()
+        refresh_all = quota.index("void QuotaManager::RefreshAll")
+        clear = quota.index("refreshing_ = false", refresh_all)
+        # 匹配带缩进的独立语句，避免命中注释里的 "revision_++" 字样
+        bump = quota.index("\n        revision_++;", refresh_all)
+        self.assertLess(clear, bump)
+        update = (BOARD / "data_update_task.cc").read_text()
+        self.assertIn("quota_was_refreshing", update)
+
     def test_screenshot_copy_button_with_fallback(self):
-        """截图复制按钮（2026-08-18）：现代 Clipboard API + execCommand 降级。
+        """截图复制按钮（2026-08-18 建，2026-08-21 修）：
         HTTP 局域网是非安全上下文（isSecureContext=false，navigator.clipboard 与
-        ClipboardItem 均为 undefined），必须保留 execCommand('copy') 选中 <img>
-        的降级路径，否则复制在局域网后台必然失败。"""
+        ClipboardItem 均为 undefined），必须保留 execCommand('copy') copy 事件劫持
+        的降级路径，否则复制在局域网后台必然失败。2026-08-21 修复：
+        - 原生 PNG 路径必须先判 isSecureContext（局域网 IP 下 clipboard 为 undefined）
+        - 降级路径除 text/html 外必须再写 text/rtf（内嵌 PNG hex，TextEdit/Word/
+          WPS 贴出图片）——此前只有 text/html，多数应用贴不出图片
+        - 下载文件名必须为「页面名_YYYY_MM_DD.png」，页面名来自 /api/device 的
+          current_page（C++ 侧 DeviceHandler 必须输出该字段）"""
         admin = (BOARD / "managers/admin_server.cc").read_text()
         self.assertIn('id="screenshotCopyBtn"', admin)
         self.assertIn("copyScreenshot", admin)
@@ -571,6 +591,13 @@ class RlcdUiSourceContractTest(unittest.TestCase):
         # execCommand 的路线已实机证明不可靠（粘贴出 alt 文字而非图片）
         self.assertIn('addEventListener("copy",onCopy', admin)
         self.assertIn('setData("text/html"', admin)
+        # 2026-08-21：RTF 降级 + isSecureContext 门控 + 文件名带页面名与日期
+        self.assertIn('setData("text/rtf"', admin)
+        self.assertIn("\\pngblip", admin)
+        self.assertIn("window.isSecureContext", admin)
+        self.assertIn('screenshotLink").download=', admin)
+        # C++ 侧必须输出 current_page（文件名的数据源，硬件切页后仍准确）
+        self.assertIn('cJSON_AddStringToObject(root, "current_page"', admin)
 
     def test_global_low_battery_alert_contract(self):
         """全局低电量提示（2026-08-18）：
