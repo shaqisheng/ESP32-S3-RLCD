@@ -574,6 +574,11 @@ void QuotaManager::RefreshAll() {
         last_provider = entry.provider;
         vTaskDelay(pdMS_TO_TICKS(delay_ms));
     }
+    // 先清除 refreshing_ 再 bump revision_——顺序不能反：
+    // 若 revision_++ 先发生而 refreshing_ 尚未清除，data_update_task 的每秒检查会
+    // 以"刷新中"重绘并把新 revision 标记为已渲染；refreshing_ 清除后 TickQuotaPage
+    // 发现 revision 无变化不再重绘，"正在刷新…"就永久卡在屏幕上（2026-08-18 实机竞态）。
+    refreshing_ = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         cards_ = std::move(next);
@@ -590,7 +595,6 @@ void QuotaManager::RefreshAll() {
             nvs_close(handle);
         }
     }
-    refreshing_ = false;
     ESP_LOGI(TAG, "额度刷新完成: %s", all_ok ? "全部成功" : "存在失败");
 }
 

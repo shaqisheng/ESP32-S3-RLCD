@@ -213,11 +213,16 @@ void CustomLcdDisplay::DataUpdateTask(void *arg) {
             if (weather_manager.IsRefreshing() && self->IsForecastMode()) {
                 self->MarkWeatherRefreshing();
             }
-            // AI 页同理：刷新中立刻重绘显示"正在刷新…"
-            if (QuotaManager::GetInstance().IsRefreshing() && self->IsQuotaMode()) {
+            // AI 页同理：刷新中立刻重绘显示"正在刷新…"；
+            // refreshing 由 true 跳 false 时也补一次重绘显示最终状态——
+            // 防御性：即使 revision 被竞态中的"刷新中"渲染消费，跳变重绘也能自愈
+            static bool quota_was_refreshing = false;
+            const bool quota_refreshing = QuotaManager::GetInstance().IsRefreshing();
+            if ((quota_refreshing || quota_was_refreshing) && self->IsQuotaMode()) {
                 DisplayLockGuard lock(self);
                 self->RenderQuotaPageInternal();
             }
+            quota_was_refreshing = quota_refreshing;
         }
         if (can_run_background_requests && idle_long_enough) {
             auto& weather_manager = WeatherManager::getInstance();
